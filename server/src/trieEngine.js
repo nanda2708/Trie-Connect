@@ -2,12 +2,14 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
-const root = process.cwd();
+const serverRoot = process.cwd();
+const repoRoot = path.resolve(serverRoot, "..");
 const candidates = [
   process.env.TRIE_ENGINE_PATH,
-  path.join(root, "cpp", "build", "trie_engine"),
-  path.join(root, "cpp", "build", "Release", "trie_engine.exe"),
-  path.join(root, "cpp", "build", "trie_engine.exe")
+  path.join(repoRoot, "cpp", "build", "trie_engine"),
+  path.join(repoRoot, "cpp", "build", "Release", "trie_engine.exe"),
+  path.join(repoRoot, "cpp", "build", "trie_engine.exe"),
+  path.join(serverRoot, "cpp", "build", "trie_engine")
 ].filter(Boolean);
 
 const enginePath = candidates.find(existsSync);

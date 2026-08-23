@@ -16,5 +16,6 @@ export const trieApi = {
   stats: () => request("/trie/stats"),
   insert: (word: string) => request("/trie/insert", { method: "POST", body: JSON.stringify({ word }) }),
   remove: (word: string) => request(`/trie/${encodeURIComponent(word)}`, { method: "DELETE" }),
-  load: (words: string[]) => request("/trie/load", { method: "POST", body: JSON.stringify({ words }) })
+  load: (words: string[]) => request("/trie/load", { method: "POST", body: JSON.stringify({ words }) }),
+  benchmark: (size: number, prefix: string) => request(`/benchmark?size=${size}&prefix=${encodeURIComponent(prefix)}`)
 };

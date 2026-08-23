@@ -29,7 +29,6 @@ int main() {
     Trie trie;
     std::string line;
 
-    // One JSON-like command per line keeps the bridge deliberately small.
     while (std::getline(std::cin, line)) {
         std::istringstream input(line);
         std::string command;
@@ -56,9 +55,6 @@ int main() {
             std::cout << "{\"removed\":" << (trie.remove(word) ? "true" : "false") << "}\n";
         } else if (command == "stats") {
             std::cout << "{\"nodes\":" << trie.nodeCount() << "}\n";
-        } else if (command == "clear") {
-            trie = Trie();
-            std::cout << "{\"ok\":true}\n";
         } else {
             std::cout << "{\"error\":\"unknown command\"}\n";
         }

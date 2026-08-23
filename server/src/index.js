@@ -110,8 +110,27 @@ app.get("/api/benchmark", async (req, res) => {
   }
 });
 
+async function hydrateTrie() {
+  const collection = wordsCollection();
+  if (!collection) return 0;
+
+  let loaded = 0;
+  const cursor = collection.find({}, { projection: { word: 1, _id: 0 } });
+  for await (const document of cursor) {
+    if (document.word) {
+      await command("insert", document.word);
+      loaded += 1;
+    }
+  }
+  return loaded;
+}
+
 connectDb()
-  .then(() => app.listen(port, () => console.log(`TrieConnect API running on http://localhost:${port}`)))
+  .then(async () => {
+    const loaded = await hydrateTrie();
+    if (loaded) console.log(`Loaded ${loaded} words from MongoDB into the Trie`);
+    app.listen(port, () => console.log(`TrieConnect API running on http://localhost:${port}`));
+  })
   .catch(error => {
     console.error("MongoDB connection failed:", error.message);
     process.exit(1);

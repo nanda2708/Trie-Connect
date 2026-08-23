@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Activity, ArrowRight, Database, Gauge, GitBranch, Search, Trash2, Upload } from "lucide-react";
 import { trieApi } from "./api";
 
@@ -20,7 +20,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
 
   async function refreshStats() {
-    try { setStats(await trieApi.stats()); } catch { /* engine may not be built yet */ }
+    try { setStats(await trieApi.stats()); } catch { /* the C++ engine may not be built yet */ }
   }
 
   async function search(value: string) {
@@ -109,6 +109,6 @@ export default function App() {
   );
 }
 
-function Metric({ icon, label, value, detail }: { icon: React.ReactNode; label: string; value: string; detail: string }) {
+function Metric({ icon, label, value, detail }: { icon: ReactNode; label: string; value: string; detail: string }) {
   return <div className="rounded-2xl border border-[#dfe6e1] bg-white p-5"><div className="flex items-center gap-2 text-[#39745e]">{icon}<span className="text-xs font-semibold uppercase tracking-[.14em] text-[#75837c]">{label}</span></div><div className="mt-4 truncate text-2xl font-semibold tracking-tight">{value}</div><div className="mt-1 text-xs text-[#8a9690]">{detail}</div></div>;
 }

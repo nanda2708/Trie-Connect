@@ -8,6 +8,7 @@
     "dev": "concurrently \"npm run dev --workspace frontend\" \"npm run dev --workspace server\"",
     "build": "npm run build:cpp && npm run build --workspace frontend",
     "build:cpp": "cmake -S cpp -B cpp/build && cmake --build cpp/build --config Release",
+    "test:cpp": "cmake -S cpp -B cpp/build && cmake --build cpp/build --config Release && ctest --test-dir cpp/build -C Release --output-on-failure",
     "start": "npm run start --workspace server"
   },
   "devDependencies": {

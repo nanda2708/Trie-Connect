@@ -1,4 +1,5 @@
 #include "Trie.h"
+#include <algorithm>
 #include <chrono>
 #include <iostream>
 #include <sstream>
@@ -26,9 +27,7 @@ static void printWords(const std::vector<std::string>& words) {
 static std::vector<std::string> makeDataset(int size) {
     std::vector<std::string> words;
     words.reserve(size);
-    for (int i = 0; i < size; ++i) {
-        words.push_back("word" + std::to_string(i));
-    }
+    for (int i = 0; i < size; ++i) words.push_back("word" + std::to_string(i));
     return words;
 }
 
@@ -43,7 +42,6 @@ static int linearPrefixCount(const std::vector<std::string>& words, const std::s
 static void runBenchmark(int size, const std::string& prefix) {
     const auto words = makeDataset(size);
     Trie trie;
-
     for (const auto& word : words) trie.insert(word);
 
     // Warm up once so the measurement focuses on the lookup itself.

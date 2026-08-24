@@ -4,6 +4,17 @@ TrieConnect is an interactive prefix-search engine built to demonstrate data str
 
 The central data structure is a **Trie implemented in C++17**. React provides the interface and visualization, Node.js/Express provides the API boundary, and MongoDB is used only for persistence.
 
+## 🌐 Live Deployment
+
+| Component | Deployment |
+|---|---|
+| Frontend | [TrieConnect — Prefix Search Engine](https://trie-connect-frontend.vercel.app/) |
+| Backend API | [TrieConnect API](https://trie-connect-api.onrender.com) |
+
+**Frontend:** React + TypeScript + Vite + Tailwind CSS  
+**Backend:** Node.js + Express + C++17 Trie  
+**Database:** MongoDB Atlas
+
 ## Stack
 
 - **React + TypeScript + Tailwind CSS** — interface, traversal visualization, and benchmark UI

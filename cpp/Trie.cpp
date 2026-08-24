@@ -10,7 +10,14 @@ std::string Trie::normalize(const std::string& value) {
     std::string result;
     result.reserve(value.size());
     for (unsigned char ch : value) {
-        if (std::isalnum(ch)) result.push_back(static_cast<char>(std::tolower(ch)));
+        // ':' is an internal namespace separator used by the API:
+        // n:<name> and p:<phone>. Keep it so name and phone indexes
+        // remain distinguishable inside the same Trie.
+        if (ch == ':') {
+            result.push_back(':');
+        } else if (std::isalnum(ch)) {
+            result.push_back(static_cast<char>(std::tolower(ch)));
+        }
     }
     return result;
 }

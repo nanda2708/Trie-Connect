@@ -1,9 +1,10 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Database, GitBranch, Mail, Pencil, Phone, Plus, Search, Trash2, UserRound, X } from "lucide-react";
-import { contactApi, trieApi, type Contact } from "./api";
+import { Activity, Database, GitBranch, Mail, Pencil, Phone, Plus, Search, Trash2, UserRound, X } from "lucide-react";
+import { contactApi, trieApi, type BenchmarkResult, type Contact } from "./api";
 
 type Form = Omit<Contact, "id">;
 const emptyForm: Form = { name: "", phone: "", email: "", notes: "" };
+const benchmarkSizes = [10_000, 100_000, 1_000_000];
 
 export default function App() {
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -13,6 +14,8 @@ export default function App() {
   const [nodes, setNodes] = useState(1);
   const [message, setMessage] = useState("Ready");
   const [saving, setSaving] = useState(false);
+  const [benchmarks, setBenchmarks] = useState<BenchmarkResult[]>([]);
+  const [runningBenchmark, setRunningBenchmark] = useState<number | null>(null);
 
   async function refresh(value = query) {
     try {
@@ -25,7 +28,6 @@ export default function App() {
   }
 
   useEffect(() => { refresh(""); }, []);
-
   useEffect(() => {
     const timer = setTimeout(() => refresh(query), 220);
     return () => clearTimeout(timer);
@@ -82,6 +84,22 @@ export default function App() {
     }
   }
 
+  async function runBenchmark(size: number) {
+    setRunningBenchmark(size);
+    setMessage(`Running ${size.toLocaleString()} record benchmark...`);
+    try {
+      const result = await trieApi.benchmark(size);
+      setBenchmarks(current => [...current.filter(item => item.size !== size), result].sort((a, b) => a.size - b.size));
+      setMessage(`${size.toLocaleString()} records benchmark complete`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Benchmark failed");
+    } finally {
+      setRunningBenchmark(null);
+    }
+  }
+
+  const searchMode = !query.trim() ? "All contacts" : /^[+0-9]/.test(query.trim()) ? "MongoDB phone search" : "C++ Trie name-prefix search";
+
   return (
     <main className="min-h-screen bg-[#f6f8f6] text-[#17231f]">
       <header className="border-b border-[#dce5df] bg-white">
@@ -90,7 +108,7 @@ export default function App() {
             <div className="grid h-10 w-10 place-items-center rounded-xl bg-[#194d3c] text-white"><GitBranch size={19} /></div>
             <div><div className="font-semibold tracking-tight">TrieConnect</div><div className="text-[10px] uppercase tracking-[.18em] text-[#718078]">Trie-powered contact book</div></div>
           </div>
-          <div className="flex items-center gap-2 rounded-full bg-[#edf5f0] px-3 py-1.5 text-xs font-medium text-[#39745e]"><Database size={14} /> MongoDB persistence</div>
+          <div className="hidden items-center gap-2 rounded-full bg-[#edf5f0] px-3 py-1.5 text-xs font-medium text-[#39745e] sm:flex"><Database size={14} /> MongoDB persistence</div>
         </div>
       </header>
 
@@ -98,8 +116,8 @@ export default function App() {
         <div className="mx-auto max-w-6xl px-5 py-10 md:px-8 md:py-14">
           <div className="max-w-3xl">
             <p className="text-xs font-bold uppercase tracking-[.2em] text-[#39745e]">Data structures + systems</p>
-            <h1 className="mt-3 text-4xl font-semibold tracking-[-.04em] md:text-5xl">Your contacts, indexed by a Trie.</h1>
-            <p className="mt-4 max-w-2xl text-sm leading-6 text-[#66746d]">Names are indexed in a C++ Trie for fast prefix search. MongoDB stores the complete contact records so they survive server restarts.</p>
+            <h1 className="mt-3 text-4xl font-semibold tracking-[-.04em] md:text-5xl">Contacts indexed by a C++ Trie.</h1>
+            <p className="mt-4 max-w-2xl text-sm leading-6 text-[#66746d]">Name lookup uses the Trie for prefix matching. Phone, email and notes stay in MongoDB, which stores the complete contact record.</p>
           </div>
 
           <div className="mt-8 grid gap-5 lg:grid-cols-[1fr_360px]">
@@ -115,10 +133,10 @@ export default function App() {
             </div>
 
             <div className="rounded-2xl bg-[#193f34] p-6 text-white">
-              <p className="text-xs font-bold uppercase tracking-[.16em] text-[#b9dcca]">Trie status</p>
+              <p className="text-xs font-bold uppercase tracking-[.16em] text-[#b9dcca]">Live Trie status</p>
               <div className="mt-5 text-4xl font-semibold">{nodes.toLocaleString()}</div>
-              <p className="mt-1 text-sm text-[#b8ccc3]">nodes currently allocated</p>
-              <div className="mt-6 space-y-3 border-t border-white/10 pt-5 text-xs text-[#d3e1db]"><p><b className="text-white">Prefix search:</b> walk to the prefix, then traverse only its subtree.</p><p><b className="text-white">Persistence:</b> MongoDB stores names, phone numbers, email and notes.</p></div>
+              <p className="mt-1 text-sm text-[#b8ccc3]">nodes allocated for contact names</p>
+              <div className="mt-6 space-y-3 border-t border-white/10 pt-5 text-xs text-[#d3e1db]"><p><b className="text-white">Name:</b> prefix walk + subtree traversal in C++.</p><p><b className="text-white">Other fields:</b> MongoDB queries and indexes.</p><p><b className="text-white">Persistence:</b> saved names hydrate the Trie on startup.</p></div>
             </div>
           </div>
         </div>
@@ -126,15 +144,30 @@ export default function App() {
 
       <section className="mx-auto max-w-6xl px-5 py-8 md:px-8 md:py-10">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div><p className="text-xs font-bold uppercase tracking-[.18em] text-[#39745e]">Contacts</p><h2 className="mt-1 text-2xl font-semibold tracking-tight">{contacts.length} {contacts.length === 1 ? "contact" : "contacts"}</h2></div>
-          <div className="relative w-full sm:w-96"><Search size={17} className="absolute left-3 top-3 text-[#83918a]"/><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search name prefix or phone..." className="h-11 w-full rounded-xl border border-[#d5dfd9] bg-white pl-10 pr-4 text-sm outline-none focus:border-[#39745e]"/></div>
+          <div><p className="text-xs font-bold uppercase tracking-[.18em] text-[#39745e]">Contact lookup</p><h2 className="mt-1 text-2xl font-semibold tracking-tight">{contacts.length} {contacts.length === 1 ? "contact" : "contacts"}</h2></div>
+          <div className="w-full sm:w-96"><div className="relative"><Search size={17} className="absolute left-3 top-3 text-[#83918a]"/><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Name prefix or phone number..." className="h-11 w-full rounded-xl border border-[#d5dfd9] bg-white pl-10 pr-4 text-sm outline-none focus:border-[#39745e]"/></div><p className="mt-1.5 text-[11px] text-[#718078]">{searchMode}</p></div>
         </div>
 
         <div className="mt-5 grid gap-3">
           {contacts.map(contact => <ContactCard key={contact.id} contact={contact} onEdit={() => startEdit(contact)} onDelete={() => remove(contact)} />)}
           {!contacts.length && <div className="rounded-2xl border border-dashed border-[#cbd8d0] bg-white px-6 py-14 text-center"><UserRound className="mx-auto text-[#8b9992]" size={30}/><h3 className="mt-3 font-semibold">{query ? "No matching contacts" : "No contacts yet"}</h3><p className="mt-1 text-sm text-[#7b8982]">{query ? "Try another name prefix or phone number." : "Add your first contact above."}</p></div>}
         </div>
-        <p className="mt-5 text-xs text-[#7b8982]">{message} · Name lookup uses the C++ Trie; phone lookup uses MongoDB.</p>
+        <p className="mt-5 text-xs text-[#7b8982]">{message}</p>
+      </section>
+
+      <section className="border-t border-[#dce5df] bg-white">
+        <div className="mx-auto max-w-6xl px-5 py-10 md:px-8">
+          <div className="flex items-start justify-between gap-5">
+            <div><p className="text-xs font-bold uppercase tracking-[.18em] text-[#39745e]">Performance lab</p><h2 className="mt-1 text-2xl font-semibold tracking-tight">Trie vs linear prefix lookup</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-[#66746d]">Run the same prefix query against 10K, 1 lakh and 10 lakh generated records. The C++ benchmark reports median lookup time over five runs.</p></div>
+            <Activity className="hidden text-[#39745e] sm:block" size={26}/>
+          </div>
+
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+            {benchmarkSizes.map(size => <button key={size} disabled={runningBenchmark !== null} onClick={() => runBenchmark(size)} className="rounded-xl border border-[#d5dfd9] bg-[#f8faf8] px-4 py-4 text-left hover:border-[#39745e] disabled:cursor-wait disabled:opacity-60"><div className="text-xs uppercase tracking-[.14em] text-[#718078]">Dataset</div><div className="mt-1 text-lg font-semibold">{size >= 1_000_000 ? "10 lakh" : size === 100_000 ? "1 lakh" : "10,000"} records</div><div className="mt-1 text-xs text-[#718078]">{runningBenchmark === size ? "Running benchmark..." : "Click to benchmark"}</div></button>)}
+          </div>
+
+          {benchmarks.length > 0 && <div className="mt-6 overflow-x-auto rounded-xl border border-[#dce5df]"><table className="w-full min-w-[650px] text-sm"><thead className="bg-[#f5f8f5] text-left text-xs uppercase tracking-[.12em] text-[#718078]"><tr><th className="px-4 py-3">Dataset</th><th className="px-4 py-3">Linear</th><th className="px-4 py-3">Trie</th><th className="px-4 py-3">Speedup</th><th className="px-4 py-3">Matches</th></tr></thead><tbody>{benchmarks.map(result => { const speedup = result.trieMs > 0 ? result.linearMs / result.trieMs : 0; return <tr key={result.size} className="border-t border-[#e6ece8]"><td className="px-4 py-3 font-medium">{result.size.toLocaleString()}</td><td className="px-4 py-3">{result.linearMs.toFixed(4)} ms</td><td className="px-4 py-3 font-semibold text-[#28634f]">{result.trieMs.toFixed(4)} ms</td><td className="px-4 py-3">{speedup.toFixed(2)}×</td><td className="px-4 py-3">{result.trieMatches}</td></tr>; })}</tbody></table></div>}
+        </div>
       </section>
     </main>
   );

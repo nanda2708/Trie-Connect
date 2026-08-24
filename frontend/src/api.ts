@@ -18,6 +18,15 @@ export type Contact = {
   notes: string;
 };
 
+export type BenchmarkResult = {
+  size: number;
+  prefix: string;
+  linearMs: number;
+  trieMs: number;
+  linearMatches: number;
+  trieMatches: number;
+};
+
 export const contactApi = {
   list: (q = "") => request(`/contacts?q=${encodeURIComponent(q)}`) as Promise<Contact[]>,
   create: (contact: Omit<Contact, "id">) => request("/contacts", { method: "POST", body: JSON.stringify(contact) }) as Promise<Contact>,
@@ -31,5 +40,5 @@ export const trieApi = {
   stats: () => request("/trie/stats"),
   insert: (word: string) => request("/trie/insert", { method: "POST", body: JSON.stringify({ word }) }),
   remove: (word: string) => request(`/trie/${encodeURIComponent(word)}`, { method: "DELETE" }),
-  benchmark: (size: number, prefix: string) => request(`/benchmark?size=${size}&prefix=${encodeURIComponent(prefix)}`)
+  benchmark: (size: number, prefix = "word999") => request(`/benchmark?size=${size}&prefix=${encodeURIComponent(prefix)}`) as Promise<BenchmarkResult>
 };

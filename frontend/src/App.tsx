@@ -51,7 +51,7 @@ export default function App() {
   async function saveContact(event: FormEvent) {
     event.preventDefault();
     if (!form.name.trim() || !form.phone.trim()) {
-      setMessage("Name and phone number are required");
+      setMessage("Name and 10-digit phone number are required");
       return;
     }
     setSaving(true);
@@ -98,7 +98,7 @@ export default function App() {
     }
   }
 
-  const searchMode = !query.trim() ? "All contacts" : /^[+0-9]/.test(query.trim()) ? "MongoDB phone search" : "C++ Trie name-prefix search";
+  const searchMode = !query.trim() ? "All contacts" : /^\d/.test(query.trim()) ? "C++ Trie phone-prefix search" : "C++ Trie name-prefix search";
 
   return (
     <main className="min-h-screen bg-[#f6f8f6] text-[#17231f]">
@@ -117,7 +117,7 @@ export default function App() {
           <div className="max-w-3xl">
             <p className="text-xs font-bold uppercase tracking-[.2em] text-[#39745e]">Data structures + systems</p>
             <h1 className="mt-3 text-4xl font-semibold tracking-[-.04em] md:text-5xl">Contacts indexed by a C++ Trie.</h1>
-            <p className="mt-4 max-w-2xl text-sm leading-6 text-[#66746d]">Name lookup uses the Trie for prefix matching. Phone, email and notes stay in MongoDB, which stores the complete contact record.</p>
+            <p className="mt-4 max-w-2xl text-sm leading-6 text-[#66746d]">Name and phone lookup use the C++ Trie for prefix matching. Email and notes stay in MongoDB, which stores the complete contact record.</p>
           </div>
 
           <div className="mt-8 grid gap-5 lg:grid-cols-[1fr_360px]">
@@ -125,7 +125,7 @@ export default function App() {
               <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">{editingId ? "Edit contact" : "Add contact"}</h2>{editingId && <button onClick={cancelEdit} className="flex items-center gap-1 text-xs text-[#718078] hover:text-[#17231f]"><X size={14}/> Cancel</button>}</div>
               <form onSubmit={saveContact} className="grid gap-3 sm:grid-cols-2">
                 <Field label="Name" value={form.name} onChange={v => change("name", v)} placeholder="e.g. Sai Nanda Gopal" required />
-                <Field label="Phone" value={form.phone} onChange={v => change("phone", v)} placeholder="e.g. +91 98765 43210" required />
+                <Field label="Phone" value={form.phone} onChange={v => change("phone", v)} placeholder="e.g. 9999999999" required inputMode="numeric" maxLength={10} />
                 <Field label="Email" value={form.email} onChange={v => change("email", v)} placeholder="name@example.com" />
                 <Field label="Notes" value={form.notes} onChange={v => change("notes", v)} placeholder="College, work, etc." />
                 <button disabled={saving} className="mt-1 flex h-10 items-center justify-center gap-2 rounded-lg bg-[#194d3c] text-sm font-semibold text-white hover:bg-[#28634f] disabled:opacity-60 sm:col-span-2"><Plus size={16}/>{saving ? "Saving..." : editingId ? "Save changes" : "Add contact"}</button>
@@ -135,8 +135,8 @@ export default function App() {
             <div className="rounded-2xl bg-[#193f34] p-6 text-white">
               <p className="text-xs font-bold uppercase tracking-[.16em] text-[#b9dcca]">Live Trie status</p>
               <div className="mt-5 text-4xl font-semibold">{nodes.toLocaleString()}</div>
-              <p className="mt-1 text-sm text-[#b8ccc3]">nodes allocated for contact names</p>
-              <div className="mt-6 space-y-3 border-t border-white/10 pt-5 text-xs text-[#d3e1db]"><p><b className="text-white">Name:</b> prefix walk + subtree traversal in C++.</p><p><b className="text-white">Other fields:</b> MongoDB queries and indexes.</p><p><b className="text-white">Persistence:</b> saved names hydrate the Trie on startup.</p></div>
+              <p className="mt-1 text-sm text-[#b8ccc3]">nodes allocated for contact names + phone numbers</p>
+              <div className="mt-6 space-y-3 border-t border-white/10 pt-5 text-xs text-[#d3e1db]"><p><b className="text-white">Name:</b> prefix walk + subtree traversal in C++.</p><p><b className="text-white">Phone:</b> digit-prefix lookup in the same C++ Trie.</p><p><b className="text-white">Other fields:</b> stored in MongoDB.</p><p><b className="text-white">Persistence:</b> contact indexes hydrate the Trie on startup.</p></div>
             </div>
           </div>
         </div>
@@ -145,7 +145,7 @@ export default function App() {
       <section className="mx-auto max-w-6xl px-5 py-8 md:px-8 md:py-10">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div><p className="text-xs font-bold uppercase tracking-[.18em] text-[#39745e]">Contact lookup</p><h2 className="mt-1 text-2xl font-semibold tracking-tight">{contacts.length} {contacts.length === 1 ? "contact" : "contacts"}</h2></div>
-          <div className="w-full sm:w-96"><div className="relative"><Search size={17} className="absolute left-3 top-3 text-[#83918a]"/><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Name prefix or phone number..." className="h-11 w-full rounded-xl border border-[#d5dfd9] bg-white pl-10 pr-4 text-sm outline-none focus:border-[#39745e]"/></div><p className="mt-1.5 text-[11px] text-[#718078]">{searchMode}</p></div>
+          <div className="w-full sm:w-96"><div className="relative"><Search size={17} className="absolute left-3 top-3 text-[#83918a]"/><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Name prefix or 10-digit phone..." className="h-11 w-full rounded-xl border border-[#d5dfd9] bg-white pl-10 pr-4 text-sm outline-none focus:border-[#39745e]"/></div><p className="mt-1.5 text-[11px] text-[#718078]">{searchMode}</p></div>
         </div>
 
         <div className="mt-5 grid gap-3">
@@ -173,8 +173,8 @@ export default function App() {
   );
 }
 
-function Field({ label, value, onChange, placeholder, required }: { label: string; value: string; onChange: (value: string) => void; placeholder: string; required?: boolean }) {
-  return <label className="block"><span className="mb-1.5 block text-xs font-medium text-[#64736c]">{label}{required && " *"}</span><input required={required} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className="h-10 w-full rounded-lg border border-[#d5dfd9] bg-white px-3 text-sm outline-none focus:border-[#39745e]" /></label>;
+function Field({ label, value, onChange, placeholder, required, inputMode, maxLength }: { label: string; value: string; onChange: (value: string) => void; placeholder: string; required?: boolean; inputMode?: "text" | "numeric" | "email" | "tel"; maxLength?: number }) {
+  return <label className="block"><span className="mb-1.5 block text-xs font-medium text-[#64736c]">{label}{required && " *"}</span><input required={required} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} inputMode={inputMode} maxLength={maxLength} className="h-10 w-full rounded-lg border border-[#d5dfd9] bg-white px-3 text-sm outline-none focus:border-[#39745e]" /></label>;
 }
 
 function ContactCard({ contact, onEdit, onDelete }: { contact: Contact; onEdit: () => void; onDelete: () => void }) {

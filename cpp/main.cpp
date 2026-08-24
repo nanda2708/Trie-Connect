@@ -62,7 +62,6 @@ static void runBenchmark(int size, const std::string& prefix) {
     Trie trie;
     for (const auto& word : words) trie.insert(word);
 
-    // Warm up both paths before taking measurements.
     volatile int linearWarmup = linearPrefixCount(words, prefix);
     volatile int trieWarmup = trie.countPrefix(prefix);
     (void)linearWarmup;
@@ -87,6 +86,14 @@ static void runBenchmark(int size, const std::string& prefix) {
               << "}\n";
 }
 
+static void writeResponse(const std::string& response) {
+    // The Node.js API reads one JSON response per line. Because stdout is a
+    // pipe when the engine is spawned by Node, a newline does not guarantee
+    // an immediate flush. Flush after every response so API requests never
+    // wait indefinitely for buffered output.
+    std::cout << response << '\n' << std::flush;
+}
+
 int main() {
     std::ios::sync_with_stdio(false);
     std::cin.tie(nullptr);
@@ -103,32 +110,41 @@ int main() {
             std::string word;
             input >> word;
             trie.insert(word);
-            std::cout << "{\"ok\":true}\n";
+            writeResponse("{\"ok\":true}");
         } else if (command == "search") {
             std::string word;
             input >> word;
-            std::cout << "{\"found\":" << (trie.search(word) ? "true" : "false") << "}\n";
+            writeResponse("{\"found\":" + std::string(trie.search(word) ? "true" : "false") + "}");
         } else if (command == "prefix") {
             std::string prefix;
             int limit = 10;
             input >> prefix >> limit;
-            std::cout << "{\"count\":" << trie.countPrefix(prefix) << ",\"words\":";
-            printWords(trie.autocomplete(prefix, limit));
-            std::cout << "}\n";
+
+            std::ostringstream response;
+            response << "{\"count\":" << trie.countPrefix(prefix) << ",\"words\":";
+            const auto words = trie.autocomplete(prefix, limit);
+            response << "[";
+            for (std::size_t i = 0; i < words.size(); ++i) {
+                if (i) response << ",";
+                response << "\"" << jsonEscape(words[i]) << "\"";
+            }
+            response << "]}";
+            writeResponse(response.str());
         } else if (command == "remove") {
             std::string word;
             input >> word;
-            std::cout << "{\"removed\":" << (trie.remove(word) ? "true" : "false") << "}\n";
+            writeResponse("{\"removed\":" + std::string(trie.remove(word) ? "true" : "false") + "}");
         } else if (command == "stats") {
-            std::cout << "{\"nodes\":" << trie.nodeCount() << "}\n";
+            writeResponse("{\"nodes\":" + std::to_string(trie.nodeCount()) + "}");
         } else if (command == "benchmark") {
             int size = 10000;
             std::string prefix = "word999";
             input >> size >> prefix;
             size = std::max(100, std::min(size, 1000000));
             runBenchmark(size, prefix);
+            std::cout << std::flush;
         } else {
-            std::cout << "{\"error\":\"unknown command\"}\n";
+            writeResponse("{\"error\":\"unknown command\"}");
         }
     }
 }

@@ -1,159 +1,149 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { Activity, ArrowRight, Database, Gauge, GitBranch, Search, Trash2, Upload } from "lucide-react";
-import { trieApi } from "./api";
-import TrieVisualizer from "./components/TrieVisualizer";
-import BenchmarkPanel from "./components/BenchmarkPanel";
+import { useEffect, useState } from "react";
+import { Database, GitBranch, Mail, Pencil, Phone, Plus, Search, Trash2, UserRound, X } from "lucide-react";
+import { contactApi, trieApi, type Contact } from "./api";
 
-const sampleWords = [
-  "nanda", "nandagopal", "nanda2708", "nandini", "nancy", "node", "nodejs",
-  "nextjs", "network", "neural", "netflix", "naruto", "nature", "notebook",
-  "react", "reactjs", "redis", "rust", "router", "runtime"
-];
-
-type Stats = { nodes: number };
+type Form = Omit<Contact, "id">;
+const emptyForm: Form = { name: "", phone: "", email: "", notes: "" };
 
 export default function App() {
-  const [prefix, setPrefix] = useState("");
-  const [results, setResults] = useState<string[]>([]);
-  const [count, setCount] = useState(0);
-  const [stats, setStats] = useState<Stats>({ nodes: 1 });
-  const [word, setWord] = useState("");
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [query, setQuery] = useState("");
+  const [form, setForm] = useState<Form>(emptyForm);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [nodes, setNodes] = useState(1);
   const [message, setMessage] = useState("Ready");
-  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  async function refreshStats() {
+  async function refresh(value = query) {
     try {
-      setStats(await trieApi.stats());
-    } catch {
-      // The API is unavailable until the C++ engine has been built and started.
-    }
-  }
-
-  async function search(value: string) {
-    setPrefix(value);
-    if (!value.trim()) {
-      setResults([]);
-      setCount(0);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const data = await trieApi.prefix(value, 8);
-      setResults(data.words || []);
-      setCount(data.count || 0);
-      setMessage(`${data.count || 0} match${data.count === 1 ? "" : "es"}`);
+      const [items, stats] = await Promise.all([contactApi.list(value), trieApi.stats()]);
+      setContacts(items);
+      setNodes(stats.nodes);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Search failed");
-    } finally {
-      setLoading(false);
+      setMessage(error instanceof Error ? error.message : "Could not load contacts");
     }
   }
 
-  async function loadSample() {
-    setLoading(true);
-    try {
-      await trieApi.load(sampleWords);
-      await refreshStats();
-      setMessage(`${sampleWords.length} sample words loaded`);
-      if (prefix) await search(prefix);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not load data");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function addWord() {
-    if (!word.trim()) return;
-    try {
-      await trieApi.insert(word.trim());
-      setMessage(`Inserted “${word.trim()}”`);
-      setWord("");
-      await refreshStats();
-      if (prefix) await search(prefix);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Insert failed");
-    }
-  }
-
-  async function removeWord(value: string) {
-    try {
-      await trieApi.remove(value);
-      setMessage(`Removed “${value}”`);
-      await refreshStats();
-      if (prefix) await search(prefix);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Remove failed");
-    }
-  }
+  useEffect(() => { refresh(""); }, []);
 
   useEffect(() => {
-    refreshStats();
-  }, []);
+    const timer = setTimeout(() => refresh(query), 220);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  function change(key: keyof Form, value: string) {
+    setForm(current => ({ ...current, [key]: value }));
+  }
+
+  function startEdit(contact: Contact) {
+    setEditingId(contact.id);
+    setForm({ name: contact.name, phone: contact.phone, email: contact.email, notes: contact.notes });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setForm(emptyForm);
+  }
+
+  async function saveContact(event: React.FormEvent) {
+    event.preventDefault();
+    if (!form.name.trim() || !form.phone.trim()) {
+      setMessage("Name and phone number are required");
+      return;
+    }
+    setSaving(true);
+    try {
+      if (editingId) {
+        await contactApi.update(editingId, form);
+        setMessage(`Updated ${form.name}`);
+      } else {
+        await contactApi.create(form);
+        setMessage(`Added ${form.name}`);
+      }
+      cancelEdit();
+      await refresh(query);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not save contact");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function remove(contact: Contact) {
+    if (!window.confirm(`Delete ${contact.name}?`)) return;
+    try {
+      await contactApi.remove(contact.id);
+      setMessage(`Deleted ${contact.name}`);
+      if (editingId === contact.id) cancelEdit();
+      await refresh(query);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not delete contact");
+    }
+  }
 
   return (
-    <main className="min-h-screen bg-[#f7f8f6] text-[#17231f]">
-      <header className="border-b border-[#dfe6e1] bg-white/80 backdrop-blur">
+    <main className="min-h-screen bg-[#f6f8f6] text-[#17231f]">
+      <header className="border-b border-[#dce5df] bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 md:px-8">
           <div className="flex items-center gap-3">
-            <div className="grid h-9 w-9 place-items-center rounded-lg bg-[#194d3c] text-white"><GitBranch size={18} /></div>
-            <div><div className="font-semibold tracking-tight">TrieConnect</div><div className="text-[10px] uppercase tracking-[.18em] text-[#789087]">Prefix search engine</div></div>
+            <div className="grid h-10 w-10 place-items-center rounded-xl bg-[#194d3c] text-white"><GitBranch size={19} /></div>
+            <div><div className="font-semibold tracking-tight">TrieConnect</div><div className="text-[10px] uppercase tracking-[.18em] text-[#718078]">Trie-powered contact book</div></div>
           </div>
-          <div className="hidden items-center gap-2 text-xs text-[#708079] sm:flex"><Activity size={14} /> C++ algorithm core</div>
+          <div className="flex items-center gap-2 rounded-full bg-[#edf5f0] px-3 py-1.5 text-xs font-medium text-[#39745e]"><Database size={14} /> MongoDB persistence</div>
         </div>
       </header>
 
-      <section className="grid-bg border-b border-[#dfe6e1]">
-        <div className="mx-auto max-w-6xl px-5 py-16 md:px-8 md:py-24">
+      <section className="border-b border-[#dce5df] bg-white">
+        <div className="mx-auto max-w-6xl px-5 py-10 md:px-8 md:py-14">
           <div className="max-w-3xl">
-            <p className="mb-4 text-xs font-bold uppercase tracking-[.22em] text-[#39745e]">Data structures · algorithms · systems</p>
-            <h1 className="text-4xl font-semibold tracking-[-.04em] md:text-6xl">Search by prefix.<br /><span className="text-[#39745e]">See the Trie work.</span></h1>
-            <p className="mt-6 max-w-2xl text-base leading-7 text-[#64736c]">An interactive implementation of a Trie in C++, exposed through a small Express API and visualized in React. No database query is doing the prefix search for us.</p>
+            <p className="text-xs font-bold uppercase tracking-[.2em] text-[#39745e]">Data structures + systems</p>
+            <h1 className="mt-3 text-4xl font-semibold tracking-[-.04em] md:text-5xl">Your contacts, indexed by a Trie.</h1>
+            <p className="mt-4 max-w-2xl text-sm leading-6 text-[#66746d]">Names are indexed in a C++ Trie for fast prefix search. MongoDB stores the complete contact records so they survive server restarts.</p>
           </div>
 
-          <div className="mt-10 max-w-3xl rounded-2xl border border-[#ccd8d1] bg-white p-3 shadow-[0_18px_60px_rgba(25,60,45,.08)]">
-            <div className="flex items-center gap-3 px-3"><Search size={19} className="text-[#779087]" /><input autoFocus value={prefix} onChange={e => search(e.target.value)} placeholder="Try a prefix — n, nan, rea, node..." className="h-12 flex-1 bg-transparent text-base outline-none placeholder:text-[#a0aca6]" /></div>
-            {prefix && <div className="mt-2 border-t border-[#edf1ee] px-3 py-4"><div className="mb-3 flex items-center justify-between text-xs text-[#728079]"><span>{loading ? "Searching..." : message}</span><span>{count} total</span></div>{results.length ? <div className="grid gap-2 sm:grid-cols-2">{results.map(item => <div key={item} className="flex items-center justify-between rounded-lg bg-[#f4f7f5] px-3 py-2.5 text-sm"><span>{item}</span><button onClick={() => removeWord(item)} title="Remove" className="text-[#9aa8a1] hover:text-red-600"><Trash2 size={14} /></button></div>)}</div> : !loading && <div className="py-5 text-sm text-[#87948e]">No words start with this prefix.</div>}</div>}
+          <div className="mt-8 grid gap-5 lg:grid-cols-[1fr_360px]">
+            <div className="rounded-2xl border border-[#dce5df] bg-[#f8faf8] p-5">
+              <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">{editingId ? "Edit contact" : "Add contact"}</h2>{editingId && <button onClick={cancelEdit} className="flex items-center gap-1 text-xs text-[#718078] hover:text-[#17231f]"><X size={14}/> Cancel</button>}</div>
+              <form onSubmit={saveContact} className="grid gap-3 sm:grid-cols-2">
+                <Field label="Name" value={form.name} onChange={v => change("name", v)} placeholder="e.g. Sai Nanda Gopal" required />
+                <Field label="Phone" value={form.phone} onChange={v => change("phone", v)} placeholder="e.g. +91 98765 43210" required />
+                <Field label="Email" value={form.email} onChange={v => change("email", v)} placeholder="name@example.com" />
+                <Field label="Notes" value={form.notes} onChange={v => change("notes", v)} placeholder="College, work, etc." />
+                <button disabled={saving} className="mt-1 flex h-10 items-center justify-center gap-2 rounded-lg bg-[#194d3c] text-sm font-semibold text-white hover:bg-[#28634f] disabled:opacity-60 sm:col-span-2"><Plus size={16}/>{saving ? "Saving..." : editingId ? "Save changes" : "Add contact"}</button>
+              </form>
+            </div>
+
+            <div className="rounded-2xl bg-[#193f34] p-6 text-white">
+              <p className="text-xs font-bold uppercase tracking-[.16em] text-[#b9dcca]">Trie status</p>
+              <div className="mt-5 text-4xl font-semibold">{nodes.toLocaleString()}</div>
+              <p className="mt-1 text-sm text-[#b8ccc3]">nodes currently allocated</p>
+              <div className="mt-6 space-y-3 border-t border-white/10 pt-5 text-xs text-[#d3e1db]"><p><b className="text-white">Prefix search:</b> walk to the prefix, then traverse only its subtree.</p><p><b className="text-white">Persistence:</b> MongoDB stores names, phone numbers, email and notes.</p></div>
+            </div>
           </div>
-
-          <div className="mt-4 flex flex-wrap gap-2 text-xs text-[#6d7c75]"><span className="rounded-full border border-[#d8e2dc] bg-white px-3 py-1.5">O(L + K) prefix lookup</span><span className="rounded-full border border-[#d8e2dc] bg-white px-3 py-1.5">C++17</span><span className="rounded-full border border-[#d8e2dc] bg-white px-3 py-1.5">Express API</span><span className="rounded-full border border-[#d8e2dc] bg-white px-3 py-1.5">MongoDB persistence</span></div>
         </div>
       </section>
 
-      <section className="mx-auto grid max-w-6xl gap-5 px-5 py-10 md:grid-cols-3 md:px-8">
-        <Metric icon={<Gauge size={18} />} label="Trie nodes" value={stats.nodes.toLocaleString()} detail="Allocated nodes in the C++ tree" />
-        <Metric icon={<Search size={18} />} label="Current prefix" value={prefix || "—"} detail={prefix ? `${count} matching words` : "Start typing above"} />
-        <Metric icon={<Database size={18} />} label="Persistence" value="MongoDB" detail="Stores words; Trie handles search" />
-      </section>
-
-      <section className="mx-auto max-w-6xl px-5 pb-8 md:px-8">
-        <div className="mb-4">
-          <p className="text-xs font-bold uppercase tracking-[.18em] text-[#39745e]">Traversal</p>
-          <h2 className="mt-2 text-xl font-semibold tracking-tight">Follow the prefix through the tree</h2>
+      <section className="mx-auto max-w-6xl px-5 py-8 md:px-8 md:py-10">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div><p className="text-xs font-bold uppercase tracking-[.18em] text-[#39745e]">Contacts</p><h2 className="mt-1 text-2xl font-semibold tracking-tight">{contacts.length} {contacts.length === 1 ? "contact" : "contacts"}</h2></div>
+          <div className="relative w-full sm:w-96"><Search size={17} className="absolute left-3 top-3 text-[#83918a]"/><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search name prefix or phone..." className="h-11 w-full rounded-xl border border-[#d5dfd9] bg-white pl-10 pr-4 text-sm outline-none focus:border-[#39745e]"/></div>
         </div>
-        <TrieVisualizer prefix={prefix} matches={results} />
-      </section>
 
-      <section className="mx-auto max-w-6xl px-5 pb-10 md:px-8">
-        <BenchmarkPanel />
-      </section>
-
-      <section className="mx-auto grid max-w-6xl gap-6 px-5 pb-20 md:grid-cols-[1fr_360px] md:px-8">
-        <div className="rounded-2xl border border-[#dfe6e1] bg-white p-6">
-          <div className="flex items-start justify-between gap-4"><div><h2 className="font-semibold">Work with the data structure</h2><p className="mt-1 text-sm text-[#74817b]">Insert a word and watch the node count change.</p></div><button onClick={loadSample} className="flex items-center gap-2 rounded-lg bg-[#194d3c] px-3 py-2 text-xs font-semibold text-white hover:bg-[#28634f]"><Upload size={14} /> Load sample</button></div>
-          <div className="mt-6 flex gap-2"><input value={word} onChange={e => setWord(e.target.value)} onKeyDown={e => e.key === "Enter" && addWord()} placeholder="Add a word" className="h-10 flex-1 rounded-lg border border-[#d7e0db] px-3 text-sm outline-none focus:border-[#39745e]" /><button onClick={addWord} className="rounded-lg border border-[#194d3c] px-4 text-sm font-semibold text-[#194d3c] hover:bg-[#edf5f0]">Insert</button></div>
+        <div className="mt-5 grid gap-3">
+          {contacts.map(contact => <ContactCard key={contact.id} contact={contact} onEdit={() => startEdit(contact)} onDelete={() => remove(contact)} />)}
+          {!contacts.length && <div className="rounded-2xl border border-dashed border-[#cbd8d0] bg-white px-6 py-14 text-center"><UserRound className="mx-auto text-[#8b9992]" size={30}/><h3 className="mt-3 font-semibold">{query ? "No matching contacts" : "No contacts yet"}</h3><p className="mt-1 text-sm text-[#7b8982]">{query ? "Try another name prefix or phone number." : "Add your first contact above."}</p></div>}
         </div>
-        <div className="rounded-2xl border border-[#dfe6e1] bg-[#193f34] p-6 text-white">
-          <div className="flex items-center gap-2 text-[#b9dcca]"><GitBranch size={17} /><span className="text-xs font-bold uppercase tracking-[.15em]">How it works</span></div>
-          <div className="mt-5 space-y-4 text-sm leading-6 text-[#d2dfd9]"><p><b className="text-white">1.</b> Express receives the prefix.</p><p><b className="text-white">2.</b> The C++ engine walks one character at a time.</p><p><b className="text-white">3.</b> Only the matching subtree is traversed.</p><p><b className="text-white">4.</b> MongoDB persists words when configured.</p></div>
-          <div className="mt-6 flex items-center gap-2 text-xs text-[#9fc0b0]">{message}<ArrowRight size={13} /></div>
-        </div>
+        <p className="mt-5 text-xs text-[#7b8982]">{message} · Name lookup uses the C++ Trie; phone lookup uses MongoDB.</p>
       </section>
     </main>
   );
 }
 
-function Metric({ icon, label, value, detail }: { icon: ReactNode; label: string; value: string; detail: string }) {
-  return <div className="rounded-2xl border border-[#dfe6e1] bg-white p-5"><div className="flex items-center gap-2 text-[#39745e]">{icon}<span className="text-xs font-semibold uppercase tracking-[.14em] text-[#75837c]">{label}</span></div><div className="mt-4 truncate text-2xl font-semibold tracking-tight">{value}</div><div className="mt-1 text-xs text-[#8a9690]">{detail}</div></div>;
+function Field({ label, value, onChange, placeholder, required }: { label: string; value: string; onChange: (value: string) => void; placeholder: string; required?: boolean }) {
+  return <label className="block"><span className="mb-1.5 block text-xs font-medium text-[#64736c]">{label}{required && " *"}</span><input required={required} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className="h-10 w-full rounded-lg border border-[#d5dfd9] bg-white px-3 text-sm outline-none focus:border-[#39745e]" /></label>;
+}
+
+function ContactCard({ contact, onEdit, onDelete }: { contact: Contact; onEdit: () => void; onDelete: () => void }) {
+  return <article className="rounded-2xl border border-[#dce5df] bg-white p-5 shadow-[0_8px_30px_rgba(25,60,45,.04)]"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><div className="flex items-center gap-3"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#e8f1eb] font-semibold text-[#28634f]">{contact.name.charAt(0).toUpperCase()}</div><div><h3 className="font-semibold">{contact.name}</h3><div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#718078]"><span className="inline-flex items-center gap-1"><Phone size={12}/>{contact.phone}</span>{contact.email && <span className="inline-flex items-center gap-1"><Mail size={12}/>{contact.email}</span>}</div></div></div>{contact.notes && <p className="mt-3 pl-[52px] text-sm text-[#64736c]">{contact.notes}</p>}</div><div className="flex gap-2 self-end sm:self-center"><button onClick={onEdit} title="Edit contact" className="grid h-9 w-9 place-items-center rounded-lg border border-[#d5dfd9] text-[#52635b] hover:bg-[#f2f6f3]"><Pencil size={15}/></button><button onClick={onDelete} title="Delete contact" className="grid h-9 w-9 place-items-center rounded-lg border border-[#ead8d8] text-[#a35454] hover:bg-[#fff4f4]"><Trash2 size={15}/></button></div></div></article>;
 }

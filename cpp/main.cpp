@@ -27,7 +27,9 @@ static void printWords(const std::vector<std::string>& words) {
 static std::vector<std::string> makeDataset(int size) {
     std::vector<std::string> words;
     words.reserve(size);
-    for (int i = 0; i < size; ++i) words.push_back("word" + std::to_string(i));
+    for (int i = 0; i < size; ++i) {
+        words.push_back("word" + std::to_string(i));
+    }
     return words;
 }
 
@@ -39,25 +41,42 @@ static int linearPrefixCount(const std::vector<std::string>& words, const std::s
     return count;
 }
 
+template <typename Function>
+static double medianLookupMs(Function lookup) {
+    std::vector<double> samples;
+    samples.reserve(5);
+
+    for (int i = 0; i < 5; ++i) {
+        const auto start = std::chrono::steady_clock::now();
+        lookup();
+        const auto end = std::chrono::steady_clock::now();
+        samples.push_back(std::chrono::duration<double, std::milli>(end - start).count());
+    }
+
+    std::sort(samples.begin(), samples.end());
+    return samples[samples.size() / 2];
+}
+
 static void runBenchmark(int size, const std::string& prefix) {
     const auto words = makeDataset(size);
     Trie trie;
     for (const auto& word : words) trie.insert(word);
 
-    // Warm up once so the measurement focuses on the lookup itself.
-    trie.autocomplete(prefix, size);
-    linearPrefixCount(words, prefix);
+    // Warm up both paths before taking measurements.
+    volatile int linearWarmup = linearPrefixCount(words, prefix);
+    volatile int trieWarmup = trie.countPrefix(prefix);
+    (void)linearWarmup;
+    (void)trieWarmup;
 
-    const auto linearStart = std::chrono::steady_clock::now();
-    const int linearMatches = linearPrefixCount(words, prefix);
-    const auto linearEnd = std::chrono::steady_clock::now();
+    int linearMatches = 0;
+    const double linearMs = medianLookupMs([&]() {
+        linearMatches = linearPrefixCount(words, prefix);
+    });
 
-    const auto trieStart = std::chrono::steady_clock::now();
-    const int trieMatches = trie.countPrefix(prefix);
-    const auto trieEnd = std::chrono::steady_clock::now();
-
-    const double linearMs = std::chrono::duration<double, std::milli>(linearEnd - linearStart).count();
-    const double trieMs = std::chrono::duration<double, std::milli>(trieEnd - trieStart).count();
+    int trieMatches = 0;
+    const double trieMs = medianLookupMs([&]() {
+        trieMatches = trie.countPrefix(prefix);
+    });
 
     std::cout << "{\"size\":" << size
               << ",\"prefix\":\"" << jsonEscape(prefix)
@@ -104,7 +123,7 @@ int main() {
             std::cout << "{\"nodes\":" << trie.nodeCount() << "}\n";
         } else if (command == "benchmark") {
             int size = 10000;
-            std::string prefix = "word";
+            std::string prefix = "word999";
             input >> size >> prefix;
             size = std::max(100, std::min(size, 1000000));
             runBenchmark(size, prefix);

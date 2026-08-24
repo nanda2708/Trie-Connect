@@ -1,0 +1,12 @@
+node_modules
+npm-debug.log*
+.git
+.github
+frontend/dist
+frontend/node_modules
+server/node_modules
+cpp/build
+.env
+.env.*
+*.log
+README* 

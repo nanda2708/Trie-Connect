@@ -34,5 +34,16 @@ int main() {
     assert(trie.search("TRIE CONNECT"));
     assert(trie.startsWith("trie"));
 
+    // Contact indexes use ':' as an internal namespace separator.
+    trie.insert("n:sai");
+    trie.insert("n:sainath");
+    trie.insert("p:9999999999");
+    trie.insert("p:9998887777");
+    assert(trie.search("n:sai"));
+    assert(trie.search("p:9999999999"));
+    assert(trie.countPrefix("n:sai") == 2);
+    assert(trie.countPrefix("p:999") == 2);
+    assert(trie.autocomplete("p:999", 10).size() == 2);
+
     return 0;
 }

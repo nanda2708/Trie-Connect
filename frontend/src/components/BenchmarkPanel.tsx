@@ -13,12 +13,13 @@ type Result = {
 const sizes = [1000, 10000, 100000, 1000000];
 
 export default function BenchmarkPanel() {
-  const [prefix, setPrefix] = useState("word");
+  const [prefix, setPrefix] = useState("word999");
   const [results, setResults] = useState<Result[]>([]);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
 
   async function runBenchmark() {
+    const value = prefix.trim() || "word999";
     setRunning(true);
     setError("");
     setResults([]);
@@ -26,7 +27,7 @@ export default function BenchmarkPanel() {
     try {
       const next: Result[] = [];
       for (const size of sizes) {
-        next.push(await trieApi.benchmark(size, prefix.trim() || "word"));
+        next.push(await trieApi.benchmark(size, value));
         setResults([...next]);
       }
     } catch (err) {
@@ -44,7 +45,7 @@ export default function BenchmarkPanel() {
         <div>
           <p className="text-xs font-bold uppercase tracking-[.18em] text-[#39745e]">Live benchmark</p>
           <h2 className="mt-2 text-xl font-semibold tracking-tight">Trie vs linear prefix search</h2>
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-[#74817b]">These numbers come from the C++ engine at request time. The benchmark builds the same dataset for both approaches and measures lookup only.</p>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-[#74817b]">Both methods search the same generated dataset. Only the lookup phase is timed, and the values below come from the C++ engine at request time.</p>
         </div>
         <div className="flex gap-2">
           <input value={prefix} onChange={e => setPrefix(e.target.value)} className="h-10 w-32 rounded-lg border border-[#d7e0db] px-3 text-sm outline-none focus:border-[#39745e]" aria-label="Benchmark prefix" />
@@ -61,7 +62,7 @@ export default function BenchmarkPanel() {
           <div key={result.size}>
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-[#697770]">
               <span className="font-semibold">{result.size.toLocaleString()} records</span>
-              <span>Trie {result.trieMs.toFixed(3)} ms · Linear {result.linearMs.toFixed(3)} ms · {result.trieMatches} matches</span>
+              <span>Trie {result.trieMs.toFixed(3)} ms · Linear {result.linearMs.toFixed(3)} ms · {result.trieMatches} match{result.trieMatches === 1 ? "" : "es"}</span>
             </div>
             <div className="grid gap-2">
               <Bar label="Trie" value={result.trieMs} max={maxTime} />

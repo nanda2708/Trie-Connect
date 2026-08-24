@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Database, GitBranch, Mail, Pencil, Phone, Plus, Search, Trash2, UserRound, X } from "lucide-react";
 import { contactApi, trieApi, type Contact } from "./api";
 
@@ -46,7 +46,7 @@ export default function App() {
     setForm(emptyForm);
   }
 
-  async function saveContact(event: React.FormEvent) {
+  async function saveContact(event: FormEvent) {
     event.preventDefault();
     if (!form.name.trim() || !form.phone.trim()) {
       setMessage("Name and phone number are required");

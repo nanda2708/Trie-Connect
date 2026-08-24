@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Activity, Database, GitBranch, Mail, Pencil, Phone, Plus, Search, Trash2, UserRound, X } from "lucide-react";
+import { Database, Pencil, Phone, Plus, Search, Trash2, UserRound, X, Zap } from "lucide-react";
 import { contactApi, trieApi, type BenchmarkResult, type Contact } from "./api";
 
 type Form = Omit<Contact, "id">;
@@ -27,9 +27,9 @@ export default function App() {
     }
   }
 
-  useEffect(() => { refresh(""); }, []);
+  useEffect(() => { void refresh(""); }, []);
   useEffect(() => {
-    const timer = setTimeout(() => refresh(query), 220);
+    const timer = setTimeout(() => void refresh(query), 250);
     return () => clearTimeout(timer);
   }, [query]);
 
@@ -50,18 +50,27 @@ export default function App() {
 
   async function saveContact(event: FormEvent) {
     event.preventDefault();
-    if (!form.name.trim() || !form.phone.trim()) {
-      setMessage("Name and 10-digit phone number are required");
+    const name = form.name.trim();
+    const phone = form.phone.trim();
+
+    if (!name) {
+      setMessage("Please enter a name.");
       return;
     }
+    if (!/^\d{10}$/.test(phone)) {
+      setMessage("Phone number must contain exactly 10 digits.");
+      return;
+    }
+
     setSaving(true);
     try {
+      const payload = { ...form, name, phone };
       if (editingId) {
-        await contactApi.update(editingId, form);
-        setMessage(`Updated ${form.name}`);
+        await contactApi.update(editingId, payload);
+        setMessage(`Updated ${name}`);
       } else {
-        await contactApi.create(form);
-        setMessage(`Added ${form.name}`);
+        await contactApi.create(payload);
+        setMessage(`Added ${name}`);
       }
       cancelEdit();
       await refresh(query);
@@ -86,11 +95,11 @@ export default function App() {
 
   async function runBenchmark(size: number) {
     setRunningBenchmark(size);
-    setMessage(`Running ${size.toLocaleString()} record benchmark...`);
+    setMessage(`Running ${size.toLocaleString()} records...`);
     try {
       const result = await trieApi.benchmark(size);
       setBenchmarks(current => [...current.filter(item => item.size !== size), result].sort((a, b) => a.size - b.size));
-      setMessage(`${size.toLocaleString()} records benchmark complete`);
+      setMessage(`${size.toLocaleString()} record benchmark complete`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Benchmark failed");
     } finally {
@@ -98,85 +107,76 @@ export default function App() {
     }
   }
 
-  const searchMode = !query.trim() ? "All contacts" : /^\d/.test(query.trim()) ? "C++ Trie phone-prefix search" : "C++ Trie name-prefix search";
+  const trimmedQuery = query.trim();
+  const searchingPhone = /^\d/.test(trimmedQuery);
+  const searchMode = !trimmedQuery ? "Showing all contacts" : searchingPhone ? "Searching phone numbers with the C++ Trie" : "Searching names with the C++ Trie";
 
   return (
-    <main className="min-h-screen bg-[#f6f8f6] text-[#17231f]">
-      <header className="border-b border-[#dce5df] bg-white">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 md:px-8">
+    <main className="min-h-screen bg-[#f4f6f5] text-[#17211d]">
+      <header className="border-b border-[#dfe5e2] bg-white">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-5 py-4">
           <div className="flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-xl bg-[#194d3c] text-white"><GitBranch size={19} /></div>
-            <div><div className="font-semibold tracking-tight">TrieConnect</div><div className="text-[10px] uppercase tracking-[.18em] text-[#718078]">Trie-powered contact book</div></div>
+            <div className="grid h-9 w-9 place-items-center rounded-lg bg-[#1f4d3b] text-white"><span className="text-sm font-bold">T</span></div>
+            <div><div className="text-[15px] font-semibold tracking-tight">TrieConnect</div><div className="text-[11px] text-[#78837e]">Contacts, indexed properly.</div></div>
           </div>
-          <div className="hidden items-center gap-2 rounded-full bg-[#edf5f0] px-3 py-1.5 text-xs font-medium text-[#39745e] sm:flex"><Database size={14} /> MongoDB persistence</div>
+          <div className="hidden items-center gap-2 text-xs text-[#68746f] sm:flex"><Database size={14} /> MongoDB</div>
         </div>
       </header>
 
-      <section className="border-b border-[#dce5df] bg-white">
-        <div className="mx-auto max-w-6xl px-5 py-10 md:px-8 md:py-14">
-          <div className="max-w-3xl">
-            <p className="text-xs font-bold uppercase tracking-[.2em] text-[#39745e]">Data structures + systems</p>
-            <h1 className="mt-3 text-4xl font-semibold tracking-[-.04em] md:text-5xl">Contacts indexed by a C++ Trie.</h1>
-            <p className="mt-4 max-w-2xl text-sm leading-6 text-[#66746d]">Name and phone lookup use the C++ Trie for prefix matching. Email and notes stay in MongoDB, which stores the complete contact record.</p>
-          </div>
-
-          <div className="mt-8 grid gap-5 lg:grid-cols-[1fr_360px]">
-            <div className="rounded-2xl border border-[#dce5df] bg-[#f8faf8] p-5">
-              <div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">{editingId ? "Edit contact" : "Add contact"}</h2>{editingId && <button onClick={cancelEdit} className="flex items-center gap-1 text-xs text-[#718078] hover:text-[#17231f]"><X size={14}/> Cancel</button>}</div>
-              <form onSubmit={saveContact} className="grid gap-3 sm:grid-cols-2">
-                <Field label="Name" value={form.name} onChange={v => change("name", v)} placeholder="e.g. Sai Nanda Gopal" required />
-                <Field label="Phone" value={form.phone} onChange={v => change("phone", v)} placeholder="e.g. 9999999999" required inputMode="numeric" maxLength={10} />
-                <Field label="Email" value={form.email} onChange={v => change("email", v)} placeholder="name@example.com" />
-                <Field label="Notes" value={form.notes} onChange={v => change("notes", v)} placeholder="College, work, etc." />
-                <button disabled={saving} className="mt-1 flex h-10 items-center justify-center gap-2 rounded-lg bg-[#194d3c] text-sm font-semibold text-white hover:bg-[#28634f] disabled:opacity-60 sm:col-span-2"><Plus size={16}/>{saving ? "Saving..." : editingId ? "Save changes" : "Add contact"}</button>
-              </form>
+      <div className="mx-auto max-w-5xl px-5 py-8 md:py-10">
+        <section className="grid gap-6 lg:grid-cols-[1fr_300px]">
+          <div className="rounded-xl border border-[#dfe5e2] bg-white p-5 md:p-6">
+            <div className="mb-5 flex items-center justify-between">
+              <div><h1 className="text-xl font-semibold">{editingId ? "Edit contact" : "Add a contact"}</h1><p className="mt-1 text-sm text-[#737e79]">Keep the details you actually need.</p></div>
+              {editingId && <button type="button" onClick={cancelEdit} className="inline-flex items-center gap-1.5 text-sm text-[#69756f] hover:text-[#17211d]"><X size={15} /> Cancel</button>}
             </div>
 
-            <div className="rounded-2xl bg-[#193f34] p-6 text-white">
-              <p className="text-xs font-bold uppercase tracking-[.16em] text-[#b9dcca]">Live Trie status</p>
-              <div className="mt-5 text-4xl font-semibold">{nodes.toLocaleString()}</div>
-              <p className="mt-1 text-sm text-[#b8ccc3]">nodes allocated for contact names + phone numbers</p>
-              <div className="mt-6 space-y-3 border-t border-white/10 pt-5 text-xs text-[#d3e1db]"><p><b className="text-white">Name:</b> prefix walk + subtree traversal in C++.</p><p><b className="text-white">Phone:</b> digit-prefix lookup in the same C++ Trie.</p><p><b className="text-white">Other fields:</b> stored in MongoDB.</p><p><b className="text-white">Persistence:</b> contact indexes hydrate the Trie on startup.</p></div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-6xl px-5 py-8 md:px-8 md:py-10">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div><p className="text-xs font-bold uppercase tracking-[.18em] text-[#39745e]">Contact lookup</p><h2 className="mt-1 text-2xl font-semibold tracking-tight">{contacts.length} {contacts.length === 1 ? "contact" : "contacts"}</h2></div>
-          <div className="w-full sm:w-96"><div className="relative"><Search size={17} className="absolute left-3 top-3 text-[#83918a]"/><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Name prefix or 10-digit phone..." className="h-11 w-full rounded-xl border border-[#d5dfd9] bg-white pl-10 pr-4 text-sm outline-none focus:border-[#39745e]"/></div><p className="mt-1.5 text-[11px] text-[#718078]">{searchMode}</p></div>
-        </div>
-
-        <div className="mt-5 grid gap-3">
-          {contacts.map(contact => <ContactCard key={contact.id} contact={contact} onEdit={() => startEdit(contact)} onDelete={() => remove(contact)} />)}
-          {!contacts.length && <div className="rounded-2xl border border-dashed border-[#cbd8d0] bg-white px-6 py-14 text-center"><UserRound className="mx-auto text-[#8b9992]" size={30}/><h3 className="mt-3 font-semibold">{query ? "No matching contacts" : "No contacts yet"}</h3><p className="mt-1 text-sm text-[#7b8982]">{query ? "Try another name prefix or phone number." : "Add your first contact above."}</p></div>}
-        </div>
-        <p className="mt-5 text-xs text-[#7b8982]">{message}</p>
-      </section>
-
-      <section className="border-t border-[#dce5df] bg-white">
-        <div className="mx-auto max-w-6xl px-5 py-10 md:px-8">
-          <div className="flex items-start justify-between gap-5">
-            <div><p className="text-xs font-bold uppercase tracking-[.18em] text-[#39745e]">Performance lab</p><h2 className="mt-1 text-2xl font-semibold tracking-tight">Trie vs linear prefix lookup</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-[#66746d]">Run the same prefix query against 10K, 1 lakh and 10 lakh generated records. The C++ benchmark reports median lookup time over five runs.</p></div>
-            <Activity className="hidden text-[#39745e] sm:block" size={26}/>
+            <form onSubmit={saveContact} className="grid gap-4 sm:grid-cols-2">
+              <Field label="Name" value={form.name} onChange={v => change("name", v)} placeholder="Sai Nanda Gopal" required autoComplete="name" />
+              <Field label="Phone number" value={form.phone} onChange={v => change("phone", v.replace(/\D/g, "").slice(0, 10))} placeholder="9999999999" required inputMode="numeric" maxLength={10} autoComplete="tel" hint="10 digits" />
+              <Field label="Email" value={form.email} onChange={v => change("email", v)} placeholder="name@example.com" inputMode="email" autoComplete="email" />
+              <Field label="Notes" value={form.notes} onChange={v => change("notes", v)} placeholder="College, work, family..." />
+              <button disabled={saving} className="mt-1 inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#1f4d3b] px-4 text-sm font-medium text-white transition hover:bg-[#183d30] disabled:cursor-not-allowed disabled:opacity-60 sm:col-span-2"><Plus size={16} /> {saving ? "Saving..." : editingId ? "Save changes" : "Add contact"}</button>
+            </form>
           </div>
 
-          <div className="mt-5 grid gap-3 md:grid-cols-3">
-            {benchmarkSizes.map(size => <button key={size} disabled={runningBenchmark !== null} onClick={() => runBenchmark(size)} className="rounded-xl border border-[#d5dfd9] bg-[#f8faf8] px-4 py-4 text-left hover:border-[#39745e] disabled:cursor-wait disabled:opacity-60"><div className="text-xs uppercase tracking-[.14em] text-[#718078]">Dataset</div><div className="mt-1 text-lg font-semibold">{size >= 1_000_000 ? "10 lakh" : size === 100_000 ? "1 lakh" : "10,000"} records</div><div className="mt-1 text-xs text-[#718078]">{runningBenchmark === size ? "Running benchmark..." : "Click to benchmark"}</div></button>)}
+          <aside className="rounded-xl border border-[#dfe5e2] bg-[#1f4d3b] p-5 text-white">
+            <div className="flex items-center gap-2 text-sm font-medium"><Zap size={15} /> Trie index</div>
+            <div className="mt-6 text-3xl font-semibold">{nodes.toLocaleString()}</div>
+            <p className="mt-1 text-sm text-[#c9d9d1]">nodes currently in memory</p>
+            <div className="mt-6 border-t border-white/15 pt-4 text-xs leading-5 text-[#d7e2dd]"><p><b className="text-white">Name</b> — prefix lookup</p><p><b className="text-white">Phone</b> — digit-prefix lookup</p><p><b className="text-white">MongoDB</b> — stores contact details</p></div>
+          </aside>
+        </section>
+
+        <section className="mt-8">
+          <div className="flex flex-col gap-3 border-b border-[#dfe5e2] pb-4 sm:flex-row sm:items-end sm:justify-between">
+            <div><h2 className="text-lg font-semibold">Contacts <span className="font-normal text-[#8a948f]">{contacts.length}</span></h2><p className="mt-1 text-xs text-[#7a8580]">{searchMode}</p></div>
+            <div className="relative w-full sm:w-80"><Search size={16} className="pointer-events-none absolute left-3 top-3 text-[#8a948f]" /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search name or phone" className="h-10 w-full rounded-lg border border-[#d5ddd9] bg-white pl-9 pr-3 text-sm outline-none transition focus:border-[#6a8e7d] focus:ring-2 focus:ring-[#dce9e3]" /></div>
           </div>
 
-          {benchmarks.length > 0 && <div className="mt-6 overflow-x-auto rounded-xl border border-[#dce5df]"><table className="w-full min-w-[650px] text-sm"><thead className="bg-[#f5f8f5] text-left text-xs uppercase tracking-[.12em] text-[#718078]"><tr><th className="px-4 py-3">Dataset</th><th className="px-4 py-3">Linear</th><th className="px-4 py-3">Trie</th><th className="px-4 py-3">Speedup</th><th className="px-4 py-3">Matches</th></tr></thead><tbody>{benchmarks.map(result => { const speedup = result.trieMs > 0 ? result.linearMs / result.trieMs : 0; return <tr key={result.size} className="border-t border-[#e6ece8]"><td className="px-4 py-3 font-medium">{result.size.toLocaleString()}</td><td className="px-4 py-3">{result.linearMs.toFixed(4)} ms</td><td className="px-4 py-3 font-semibold text-[#28634f]">{result.trieMs.toFixed(4)} ms</td><td className="px-4 py-3">{speedup.toFixed(2)}×</td><td className="px-4 py-3">{result.trieMatches}</td></tr>; })}</tbody></table></div>}
-        </div>
-      </section>
+          <div className="mt-4 divide-y divide-[#e4e9e6] overflow-hidden rounded-xl border border-[#dfe5e2] bg-white">
+            {contacts.map(contact => <ContactRow key={contact.id} contact={contact} onEdit={() => startEdit(contact)} onDelete={() => remove(contact)} />)}
+            {!contacts.length && <div className="px-6 py-14 text-center"><UserRound className="mx-auto text-[#a0aaa5]" size={28} /><h3 className="mt-3 text-sm font-medium">{query ? "No contacts found" : "Your contact list is empty"}</h3><p className="mt-1 text-xs text-[#858f8a]">{query ? "Try a different name or phone prefix." : "Add a contact above to get started."}</p></div>}
+          </div>
+          <p className="mt-3 min-h-4 text-xs text-[#74807a]">{message}</p>
+        </section>
+
+        <section className="mt-12 border-t border-[#dfe5e2] pt-8">
+          <div><h2 className="text-lg font-semibold">Performance</h2><p className="mt-1 max-w-2xl text-sm leading-6 text-[#737e79]">The same prefix lookup is tested with 10K, 1 lakh and 10 lakh generated records. Results come from the C++ benchmark.</p></div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            {benchmarkSizes.map(size => <button key={size} disabled={runningBenchmark !== null} onClick={() => void runBenchmark(size)} className="rounded-lg border border-[#dfe5e2] bg-white p-4 text-left transition hover:border-[#7b9b8c] hover:shadow-sm disabled:cursor-wait disabled:opacity-60"><div className="text-xs text-[#7b8580]">Dataset</div><div className="mt-1 font-semibold">{size === 1_000_000 ? "10 lakh" : size === 100_000 ? "1 lakh" : "10,000"} records</div><div className="mt-1 text-xs text-[#7b8580]">{runningBenchmark === size ? "Running..." : "Run benchmark"}</div></button>)}
+          </div>
+          {benchmarks.length > 0 && <div className="mt-4 overflow-x-auto rounded-lg border border-[#dfe5e2] bg-white"><table className="w-full min-w-[620px] text-sm"><thead className="bg-[#f7f8f7] text-left text-xs text-[#707b76]"><tr><th className="px-4 py-3 font-medium">Records</th><th className="px-4 py-3 font-medium">Linear</th><th className="px-4 py-3 font-medium">Trie</th><th className="px-4 py-3 font-medium">Speedup</th><th className="px-4 py-3 font-medium">Matches</th></tr></thead><tbody>{benchmarks.map(result => { const speedup = result.trieMs > 0 ? result.linearMs / result.trieMs : 0; return <tr key={result.size} className="border-t border-[#e8ecea]"><td className="px-4 py-3 font-medium">{result.size.toLocaleString()}</td><td className="px-4 py-3">{result.linearMs.toFixed(4)} ms</td><td className="px-4 py-3 font-medium text-[#2d6a52]">{result.trieMs.toFixed(4)} ms</td><td className="px-4 py-3">{speedup.toFixed(2)}×</td><td className="px-4 py-3">{result.trieMatches}</td></tr>; })}</tbody></table></div>}
+        </section>
+      </div>
     </main>
   );
 }
 
-function Field({ label, value, onChange, placeholder, required, inputMode, maxLength }: { label: string; value: string; onChange: (value: string) => void; placeholder: string; required?: boolean; inputMode?: "text" | "numeric" | "email" | "tel"; maxLength?: number }) {
-  return <label className="block"><span className="mb-1.5 block text-xs font-medium text-[#64736c]">{label}{required && " *"}</span><input required={required} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} inputMode={inputMode} maxLength={maxLength} className="h-10 w-full rounded-lg border border-[#d5dfd9] bg-white px-3 text-sm outline-none focus:border-[#39745e]" /></label>;
+function Field({ label, value, onChange, placeholder, required, inputMode, maxLength, autoComplete, hint }: { label: string; value: string; onChange: (value: string) => void; placeholder: string; required?: boolean; inputMode?: "text" | "numeric" | "email" | "tel"; maxLength?: number; autoComplete?: string; hint?: string }) {
+  return <label className="block"><span className="mb-1.5 flex items-center justify-between text-xs font-medium text-[#59665f]"><span>{label}{required && " *"}</span>{hint && <span className="font-normal text-[#8a948f]">{hint}</span>}</span><input required={required} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} inputMode={inputMode} maxLength={maxLength} autoComplete={autoComplete} className="h-10 w-full rounded-lg border border-[#d5ddd9] bg-white px-3 text-sm outline-none transition placeholder:text-[#a0a8a4] focus:border-[#6a8e7d] focus:ring-2 focus:ring-[#dce9e3]" /></label>;
 }
 
-function ContactCard({ contact, onEdit, onDelete }: { contact: Contact; onEdit: () => void; onDelete: () => void }) {
-  return <article className="rounded-2xl border border-[#dce5df] bg-white p-5 shadow-[0_8px_30px_rgba(25,60,45,.04)]"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><div className="flex items-center gap-3"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#e8f1eb] font-semibold text-[#28634f]">{contact.name.charAt(0).toUpperCase()}</div><div><h3 className="font-semibold">{contact.name}</h3><div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#718078]"><span className="inline-flex items-center gap-1"><Phone size={12}/>{contact.phone}</span>{contact.email && <span className="inline-flex items-center gap-1"><Mail size={12}/>{contact.email}</span>}</div></div></div>{contact.notes && <p className="mt-3 pl-[52px] text-sm text-[#64736c]">{contact.notes}</p>}</div><div className="flex gap-2 self-end sm:self-center"><button onClick={onEdit} title="Edit contact" className="grid h-9 w-9 place-items-center rounded-lg border border-[#d5dfd9] text-[#52635b] hover:bg-[#f2f6f3]"><Pencil size={15}/></button><button onClick={onDelete} title="Delete contact" className="grid h-9 w-9 place-items-center rounded-lg border border-[#ead8d8] text-[#a35454] hover:bg-[#fff4f4]"><Trash2 size={15}/></button></div></div></article>;
+function ContactRow({ contact, onEdit, onDelete }: { contact: Contact; onEdit: () => void; onDelete: () => void }) {
+  return <article className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5"><div className="flex min-w-0 items-center gap-3"><div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#e9f0ec] text-sm font-semibold text-[#2d6a52]">{contact.name.charAt(0).toUpperCase()}</div><div className="min-w-0"><h3 className="truncate text-sm font-medium">{contact.name}</h3><div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#727d78]"><span className="inline-flex items-center gap-1"><Phone size={12} /> {contact.phone}</span>{contact.email && <span className="truncate">{contact.email}</span>}</div>{contact.notes && <p className="mt-1 truncate text-xs text-[#8a948f]">{contact.notes}</p>}</div></div><div className="flex gap-1 self-end sm:self-center"><button type="button" onClick={onEdit} aria-label={`Edit ${contact.name}`} className="grid h-8 w-8 place-items-center rounded-md text-[#65716b] hover:bg-[#f1f4f2] hover:text-[#1f4d3b]"><Pencil size={15} /></button><button type="button" onClick={onDelete} aria-label={`Delete ${contact.name}`} className="grid h-8 w-8 place-items-center rounded-md text-[#9b6262] hover:bg-[#faf0f0]"><Trash2 size={15} /></button></div></article>;
 }

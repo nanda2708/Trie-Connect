@@ -2,7 +2,7 @@
 
 TrieConnect is an interactive prefix-search engine built to demonstrate data structures, algorithms, and systems design rather than CRUD-heavy application development.
 
-The central data structure is a **Trie implemented in C++17**. React provides the visualization, Node.js/Express provides the API boundary, and MongoDB is used only for persistence.
+The central data structure is a **Trie implemented in C++17**. React provides the interface and visualization, Node.js/Express provides the API boundary, and MongoDB is used only for persistence.
 
 ## Stack
 
@@ -51,10 +51,10 @@ For a prefix `nan`, the engine first walks `n → a → n`, then traverses only 
 
 ## Live benchmark
 
-The benchmark command generates the same dataset for both algorithms and measures the lookup phase:
+The benchmark command generates the same dataset for both algorithms and measures the lookup phase. The default UI prefix is deliberately selective (`word999`) so the Trie is not forced to enumerate the entire dataset just to demonstrate prefix navigation.
 
 ```text
-GET /api/benchmark?size=100000&prefix=word
+GET /api/benchmark?size=100000&prefix=word999
 ```
 
 The response contains actual timings from the C++ process:
@@ -62,15 +62,15 @@ The response contains actual timings from the C++ process:
 ```json
 {
   "size": 100000,
-  "prefix": "word",
-  "linearMs": 12.34,
-  "trieMs": 0.08,
-  "linearMatches": 100000,
-  "trieMatches": 100000
+  "prefix": "word999",
+  "linearMs": 1.23,
+  "trieMs": 0.01,
+  "linearMatches": 1,
+  "trieMatches": 1
 }
 ```
 
-The UI runs benchmarks at 1K, 10K, 100K and 1M records and displays the returned measurements. These are not hard-coded performance claims.
+The numbers above are illustrative response shape only. The application measures the real values at request time. The UI runs benchmarks at 1K, 10K, 100K and 1M records and displays those returned measurements.
 
 ## Project structure
 
@@ -111,7 +111,7 @@ frontend/
 - npm 10+
 - CMake 3.16+
 - a C++17 compiler
-- MongoDB Atlas or local MongoDB
+- MongoDB Atlas or local MongoDB (optional for development)
 
 ### Install dependencies
 
@@ -139,9 +139,9 @@ MONGODB_DB=trie_connect
 
 **Never commit `server/.env` or a real MongoDB credential.**
 
-If `MONGODB_URI` is not configured, the application can still run as an in-memory Trie; persistence is disabled.
+If `MONGODB_URI` is not configured, the API still starts and the C++ Trie works in memory; persistence is simply disabled.
 
-### Run
+### Run in development
 
 ```bash
 npm run dev
@@ -153,10 +153,19 @@ API: `http://localhost:5000`
 
 ### Production build
 
+Build both native and frontend assets with:
+
 ```bash
 npm run build
+```
+
+The API can then be started with:
+
+```bash
 npm start
 ```
+
+The frontend is a separate Vite build in `frontend/dist`, so deployment should host that static frontend separately from the Express API (or add a static-file serving layer if deploying both together).
 
 ## API
 
@@ -165,7 +174,7 @@ GET    /api/health
 GET    /api/trie/search?word=react
 GET    /api/trie/prefix?prefix=rea&limit=8
 GET    /api/trie/stats
-GET    /api/benchmark?size=100000&prefix=word
+GET    /api/benchmark?size=100000&prefix=word999
 POST   /api/trie/insert       { "word": "react" }
 POST   /api/trie/load         { "words": ["react", "redis"] }
 DELETE /api/trie/:word

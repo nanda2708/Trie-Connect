@@ -47,11 +47,6 @@ async function indexContact(contact) {
   await command("insert", `${PHONE_KEY}${contact.phone}`);
 }
 
-async function removeContactIndexes(contact) {
-  await command("remove", `${NAME_KEY}${contact.name}`);
-  await command("remove", `${PHONE_KEY}${contact.phone}`);
-}
-
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, service: "trie-connect-api" });
 });
@@ -288,7 +283,7 @@ connectDb()
   .then(async () => {
     const loaded = await hydrateTrie();
     if (loaded) console.log(`Loaded ${loaded} contact indexes from MongoDB into the Trie`);
-    app.listen(port, () => console.log(`TrieConnect API running on http://localhost:${port}`));
+    app.listen(port, "0.0.0.0", () => console.log(`TrieConnect API running on http://0.0.0.0:${port}`));
   })
   .catch(error => {
     console.error("MongoDB connection failed:", error.message);

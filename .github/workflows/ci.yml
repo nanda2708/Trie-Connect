@@ -7,9 +7,19 @@ on:
     branches: [main]
 
 jobs:
-  build-and-test:
+  cpp:
+    name: C++ Trie
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
+      - name: Build and test C++ Trie
+        run: npm run test:cpp
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,8 +32,23 @@ jobs:
       - name: Install Node dependencies
         run: npm install --workspaces
 
-      - name: Build and test C++ Trie
-        run: npm run test:cpp
-
       - name: Build frontend
         run: npm run build --workspace frontend
+
+  server:
+    name: Server syntax
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Node dependencies
+        run: npm install --workspaces
+
+      - name: Check server modules
+        run: node --check server/src/index.js && node --check server/src/db.js && node --check server/src/trieEngine.js

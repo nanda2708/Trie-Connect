@@ -1,0 +1,260 @@
+[
+  {
+    "name": "Aarav Varma",
+    "phone": "8260181590",
+    "email": "aarav.varma@example.com",
+    "notes": "work"
+  },
+  {
+    "name": "Aditi Patel",
+    "phone": "9613186091",
+    "email": "",
+    "notes": ""
+  },
+  {
+    "name": "Akhil Pillai",
+    "phone": "6996030824",
+    "email": "akhil.pillai@example.com",
+    "notes": "work"
+  },
+  {
+    "name": "Ananya Iyer",
+    "phone": "8821993518",
+    "email": "",
+    "notes": ""
+  },
+  {
+    "name": "Arjun Patel",
+    "phone": "7786579754",
+    "email": "",
+    "notes": ""
+  },
+  {
+    "name": "Bhavana Iyer",
+    "phone": "7194875749",
+    "email": "bhavana.iyer@example.com",
+    "notes": "cousin"
+  },
+  {
+    "name": "Charan Naidu",
+    "phone": "7527601895",
+    "email": "",
+    "notes": ""
+  },
+  {
+    "name": "Deepika Das",
+    "phone": "9971147104",
+    "email": "deepika.das@example.com",
+    "notes": "cousin"
+  },
+  {
+    "name": "Divya Kumar",
+    "phone": "8075291703",
+    "email": "divya.kumar@example.com",
+    "notes": "neighbour"
+  },
+  {
+    "name": "Gautam Pillai",
+    "phone": "9671276842",
+    "email": "",
+    "notes": "school friend"
+  },
+  {
+    "name": "Harini Reddy",
+    "phone": "9563212233",
+    "email": "harini.reddy@example.com",
+    "notes": ""
+  },
+  {
+    "name": "Ishaan Naidu",
+    "phone": "7440268599",
+    "email": "",
+    "notes": ""
+  },
+  {
+    "name": "Kavya Sharma",
+    "phone": "6786666176",
+    "email": "kavya.sharma@example.com",
+    "notes": "neighbour"
+  },
+  {
+    "name": "Kiran Bose",
+    "phone": "9215901092",
+    "email": "kiran.bose@example.com",
+    "notes": "family"
+  },
+  {
+    "name": "Lakshmi Chowdary",
+    "phone": "6139624595",
+    "email": "lakshmi.chowdary@example.com",
+    "notes": "landlord"
+  },
+  {
+    "name": "Manoj Gupta",
+    "phone": "9774121547",
+    "email": "",
+    "notes": "neighbour"
+  },
+  {
+    "name": "Meera Gupta",
+    "phone": "8280841485",
+    "email": "meera.gupta@example.com",
+    "notes": "neighbour"
+  },
+  {
+    "name": "Nikhil Shah",
+    "phone": "8393363387",
+    "email": "",
+    "notes": "college"
+  },
+  {
+    "name": "Pooja Patel",
+    "phone": "8743957551",
+    "email": "pooja.patel@example.com",
+    "notes": "landlord"
+  },
+  {
+    "name": "Pranav Nair",
+    "phone": "7537990751",
+    "email": "",
+    "notes": ""
+  },
+  {
+    "name": "Priya Gupta",
+    "phone": "7726516761",
+    "email": "priya.gupta@example.com",
+    "notes": "gym"
+  },
+  {
+    "name": "Rahul Bose",
+    "phone": "6297299752",
+    "email": "",
+    "notes": "college"
+  },
+  {
+    "name": "Rahul Kumar",
+    "phone": "6182633043",
+    "email": "",
+    "notes": ""
+  },
+  {
+    "name": "Ravi Pillai",
+    "phone": "8486205798",
+    "email": "",
+    "notes": ""
+  },
+  {
+    "name": "Sai Rao",
+    "phone": "7828807290",
+    "email": "sai.rao@example.com",
+    "notes": "landlord"
+  },
+  {
+    "name": "Sai Kiran Sharma",
+    "phone": "6805888718",
+    "email": "sai.sharma@example.com",
+    "notes": "school friend"
+  },
+  {
+    "name": "Sanjay Varma",
+    "phone": "6187801759",
+    "email": "",
+    "notes": "neighbour"
+  },
+  {
+    "name": "Sneha Verma",
+    "phone": "8788783848",
+    "email": "",
+    "notes": "gym"
+  },
+  {
+    "name": "Srinivas Kumar",
+    "phone": "9167513613",
+    "email": "",
+    "notes": ""
+  },
+  {
+    "name": "Tanvi Gupta",
+    "phone": "7524273167",
+    "email": "",
+    "notes": "neighbour"
+  },
+  {
+    "name": "Tejas Shah",
+    "phone": "7686563551",
+    "email": "tejas.shah@example.com",
+    "notes": ""
+  },
+  {
+    "name": "Varun Nair",
+    "phone": "9706589481",
+    "email": "",
+    "notes": ""
+  },
+  {
+    "name": "Vikram Menon",
+    "phone": "7114402426",
+    "email": "vikram.menon@example.com",
+    "notes": ""
+  },
+  {
+    "name": "Yamini Iyer",
+    "phone": "9514026140",
+    "email": "",
+    "notes": "work"
+  },
+  {
+    "name": "Zoya Rao",
+    "phone": "7141705864",
+    "email": "zoya.rao@example.com",
+    "notes": ""
+  },
+  {
+    "name": "Suresh Verma",
+    "phone": "7124023448",
+    "email": "suresh.verma@example.com",
+    "notes": ""
+  },
+  {
+    "name": "Swathi Verma",
+    "phone": "7450400088",
+    "email": "",
+    "notes": "neighbour"
+  },
+  {
+    "name": "Harsha Naidu",
+    "phone": "9167868433",
+    "email": "harsha.naidu@example.com",
+    "notes": ""
+  },
+  {
+    "name": "Keerthi Sharma",
+    "phone": "7650201462",
+    "email": "keerthi.sharma@example.com",
+    "notes": "cousin"
+  },
+  {
+    "name": "Mohan Reddy",
+    "phone": "8934072247",
+    "email": "mohan.reddy@example.com",
+    "notes": "family"
+  },
+  {
+    "name": "Abhinav Rao",
+    "phone": "9876543203",
+    "email": "",
+    "notes": ""
+  },
+  {
+    "name": "Nandini Kumar",
+    "phone": "9876543214",
+    "email": "",
+    "notes": ""
+  },
+  {
+    "name": "Rohit Verma",
+    "phone": "9876543225",
+    "email": "",
+    "notes": ""
+  }
+]

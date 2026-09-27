@@ -1,291 +1,128 @@
 import "dotenv/config";
 import cors from "cors";
 import express from "express";
-import { connectDb, contactsCollection, wordsCollection } from "./db.js";
-import { command } from "./trieEngine.js";
+import { readFile } from "node:fs/promises";
+import { send, whenRestarted } from "./engine.js";
+import * as searchIndex from "./searchIndex.js";
+import { openStore } from "./store.js";
+
+const port = Number(process.env.PORT || 5000);
+const store = await openStore();
+
+class BadRequest extends Error {
+  status = 400;
+}
+
+// Express 5 forwards rejected promises to the error handler, so routes can
+// just throw.
+function validate(body, current = {}) {
+  const name = String(body.name ?? current.name ?? "").trim().slice(0, 80);
+  const phone = String(body.phone ?? current.phone ?? "").trim();
+  const email = String(body.email ?? current.email ?? "").trim().slice(0, 120);
+  const notes = String(body.notes ?? current.notes ?? "").trim().slice(0, 500);
+
+  if (!searchIndex.tokenize(name).length) throw new BadRequest("name needs at least one letter or number");
+  if (!/^\d{10}$/.test(phone)) throw new BadRequest("phone number must be exactly 10 digits");
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new BadRequest("that email doesn't look right");
+
+  return { name, phone, email, notes };
+}
+
+async function findContact(id) {
+  const contact = await store.get(id);
+  if (!contact) {
+    const error = new Error("contact not found");
+    error.status = 404;
+    throw error;
+  }
+  return contact;
+}
 
 const app = express();
-const port = Number(process.env.PORT || 5000);
-
-const NAME_KEY = "n:";
-const PHONE_KEY = "p:";
-
 app.use(cors({ origin: process.env.CLIENT_URL || "http://localhost:5173" }));
-app.use(express.json({ limit: "1mb" }));
-
-function normalizeWord(value) {
-  return String(value).toLowerCase().replace(/[^a-z0-9]/g, "");
-}
-
-function cleanWord(value) {
-  const word = normalizeWord(value);
-  if (!word) throw new Error("name must contain at least one letter or number");
-  return word;
-}
-
-function cleanPhone(value) {
-  const phone = String(value ?? "").trim();
-  if (!/^\d{10}$/.test(phone)) {
-    throw new Error("phone number must be exactly 10 digits");
-  }
-  return phone;
-}
-
-function contactView(contact) {
-  if (!contact) return null;
-  return {
-    id: contact._id?.toString(),
-    name: contact.displayName,
-    phone: contact.phone,
-    email: contact.email || "",
-    notes: contact.notes || "",
-  };
-}
-
-async function indexContact(contact) {
-  await command("insert", `${NAME_KEY}${contact.name}`);
-  await command("insert", `${PHONE_KEY}${contact.phone}`);
-}
+app.use(express.json({ limit: "100kb" }));
 
 app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, service: "trie-connect-api" });
+  res.json({ ok: true, storage: store.kind });
 });
 
-app.get("/api/trie/search", async (req, res) => {
-  try {
-    const word = cleanWord(req.query.word || "");
-    res.json(await command("search", word));
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
+app.get("/api/stats", async (_req, res) => {
+  const [trie, contacts] = await Promise.all([send("stats"), store.count()]);
+  res.json({ trie, contacts, storage: store.kind });
 });
 
-app.get("/api/trie/prefix", async (req, res) => {
-  try {
-    const prefix = cleanWord(req.query.prefix || "");
-    const parsedLimit = Number(req.query.limit || 10);
-    const limit = Math.min(Math.max(Number.isFinite(parsedLimit) ? parsedLimit : 10, 1), 50);
-    res.json(await command("prefix", prefix, limit));
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-});
-
-app.post("/api/trie/insert", async (req, res) => {
-  try {
-    const word = cleanWord(req.body.word || "");
-    const result = await command("insert", word);
-    const collection = wordsCollection();
-    if (collection) {
-      await collection.updateOne(
-        { word },
-        { $set: { word, updatedAt: new Date() }, $setOnInsert: { createdAt: new Date() } },
-        { upsert: true },
-      );
-    }
-    res.status(201).json({ ...result, word });
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-});
-
-app.delete("/api/trie/:word", async (req, res) => {
-  try {
-    const word = cleanWord(req.params.word);
-    const result = await command("remove", word);
-    const collection = wordsCollection();
-    if (collection && result.removed) await collection.deleteOne({ word });
-    res.json({ ...result, word });
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-});
-
-app.get("/api/trie/stats", async (_req, res) => {
-  try {
-    res.json(await command("stats"));
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post("/api/trie/load", async (req, res) => {
-  try {
-    if (!Array.isArray(req.body.words)) return res.status(400).json({ error: "words must be an array" });
-    const selected = [...new Set(req.body.words.slice(0, 10000).map(normalizeWord).filter(Boolean))];
-    for (const word of selected) await command("insert", word);
-    const collection = wordsCollection();
-    if (collection && selected.length) {
-      const now = new Date();
-      await collection.bulkWrite(selected.map(word => ({
-        updateOne: {
-          filter: { word },
-          update: { $set: { word, updatedAt: now }, $setOnInsert: { createdAt: now } },
-          upsert: true,
-        },
-      })));
-    }
-    res.json({ inserted: selected.length });
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-});
-
-// MongoDB owns complete contact records. The C++ Trie indexes names and phone numbers.
 app.get("/api/contacts", async (req, res) => {
-  try {
-    const collection = contactsCollection();
-    if (!collection) return res.json([]);
-
-    const query = String(req.query.q || "").trim();
-    if (!query) {
-      const contacts = await collection.find({}).sort({ displayName: 1 }).limit(200).toArray();
-      return res.json(contacts.map(contactView));
-    }
-
-    const digits = query.replace(/\D/g, "");
-    if (/^\d/.test(query)) {
-      if (!digits) return res.json([]);
-      const trieMatches = await command("prefix", `${PHONE_KEY}${digits}`, 50);
-      const phones = (trieMatches.words || [])
-        .filter(value => value.startsWith(PHONE_KEY))
-        .map(value => value.slice(PHONE_KEY.length));
-      const byPhone = phones.length ? await collection.find({ phone: { $in: phones } }).toArray() : [];
-      return res.json(byPhone.map(contactView));
-    }
-
-    const prefix = normalizeWord(query);
-    const trieMatches = prefix ? await command("prefix", `${NAME_KEY}${prefix}`, 50) : { words: [] };
-    const names = (trieMatches.words || [])
-      .filter(value => value.startsWith(NAME_KEY))
-      .map(value => value.slice(NAME_KEY.length));
-    const byName = names.length ? await collection.find({ name: { $in: names } }).toArray() : [];
-    return res.json(byName.map(contactView));
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  const query = String(req.query.q ?? "").trim();
+  if (!query) {
+    return res.json({ contacts: await store.all(200), search: null });
   }
+  const { ids, ...search } = await searchIndex.search(query);
+  let contacts = await store.getMany(ids);
+  if (search.mode === "name") contacts = contacts.filter(c => searchIndex.wordsMatch(c.name, query));
+  res.json({ contacts, search });
 });
 
 app.post("/api/contacts", async (req, res) => {
-  try {
-    const collection = contactsCollection();
-    if (!collection) return res.status(503).json({ error: "MongoDB is not configured" });
-
-    const displayName = String(req.body.name || "").trim();
-    const name = cleanWord(displayName);
-    const phone = cleanPhone(req.body.phone);
-    const email = String(req.body.email || "").trim();
-    const notes = String(req.body.notes || "").trim();
-    const now = new Date();
-    const document = { displayName, name, phone, email, notes, createdAt: now, updatedAt: now };
-
-    const existing = await collection.findOne({ phone });
-    if (existing) return res.status(409).json({ error: "A contact with this phone number already exists" });
-
-    await collection.insertOne(document);
-    await indexContact(document);
-    res.status(201).json(contactView(document));
-  } catch (error) {
-    res.status(400).json({ error: error.message });
+  const fields = validate(req.body ?? {});
+  if (await store.phoneTaken(fields.phone)) {
+    return res.status(409).json({ error: "a contact with this phone number already exists" });
   }
+  const contact = await store.create(fields);
+  await searchIndex.add(contact);
+  res.status(201).json(contact);
 });
 
 app.put("/api/contacts/:id", async (req, res) => {
-  try {
-    const { ObjectId } = await import("mongodb");
-    const collection = contactsCollection();
-    if (!collection) return res.status(503).json({ error: "MongoDB is not configured" });
-    if (!ObjectId.isValid(req.params.id)) return res.status(400).json({ error: "invalid contact id" });
-
-    const _id = new ObjectId(req.params.id);
-    const old = await collection.findOne({ _id });
-    if (!old) return res.status(404).json({ error: "contact not found" });
-
-    const displayName = String(req.body.name ?? old.displayName).trim();
-    const name = cleanWord(displayName);
-    const phone = cleanPhone(req.body.phone ?? old.phone);
-    const email = String(req.body.email ?? old.email ?? "").trim();
-    const notes = String(req.body.notes ?? old.notes ?? "").trim();
-    const duplicate = await collection.findOne({ phone, _id: { $ne: _id } });
-    if (duplicate) return res.status(409).json({ error: "A contact with this phone number already exists" });
-
-    await collection.updateOne({ _id }, { $set: { displayName, name, phone, email, notes, updatedAt: new Date() } });
-
-    if (old.name !== name || old.phone !== phone) {
-      if (old.name !== name) {
-        const stillUsedName = await collection.findOne({ name: old.name, _id: { $ne: _id } });
-        if (!stillUsedName) await command("remove", `${NAME_KEY}${old.name}`);
-      }
-      if (old.phone !== phone) await command("remove", `${PHONE_KEY}${old.phone}`);
-      await indexContact({ name, phone });
-    }
-
-    res.json(contactView(await collection.findOne({ _id })));
-  } catch (error) {
-    res.status(400).json({ error: error.message });
+  const before = await findContact(req.params.id);
+  const fields = validate(req.body ?? {}, before);
+  if (await store.phoneTaken(fields.phone, before.id)) {
+    return res.status(409).json({ error: "a contact with this phone number already exists" });
   }
+  const after = await store.update(before.id, fields);
+  await searchIndex.replace(before, after);
+  res.json(after);
 });
 
 app.delete("/api/contacts/:id", async (req, res) => {
-  try {
-    const { ObjectId } = await import("mongodb");
-    const collection = contactsCollection();
-    if (!collection) return res.status(503).json({ error: "MongoDB is not configured" });
-    if (!ObjectId.isValid(req.params.id)) return res.status(400).json({ error: "invalid contact id" });
+  const contact = await findContact(req.params.id);
+  await store.remove(contact.id);
+  await searchIndex.remove(contact);
+  res.status(204).end();
+});
 
-    const _id = new ObjectId(req.params.id);
-    const contact = await collection.findOne({ _id });
-    if (!contact) return res.status(404).json({ error: "contact not found" });
-
-    await collection.deleteOne({ _id });
-    const stillUsedName = await collection.findOne({ name: contact.name });
-    const stillUsedPhone = await collection.findOne({ phone: contact.phone });
-    if (!stillUsedName) await command("remove", `${NAME_KEY}${contact.name}`);
-    if (!stillUsedPhone) await command("remove", `${PHONE_KEY}${contact.phone}`);
-
-    res.json({ ok: true });
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
+app.get("/api/trie/walk", async (req, res) => {
+  res.json(await searchIndex.walk(req.query.q ?? ""));
 });
 
 app.get("/api/benchmark", async (req, res) => {
-  try {
-    const parsedSize = Number(req.query.size || 10000);
-    const size = Math.min(Math.max(Number.isFinite(parsedSize) ? parsedSize : 10000, 100), 1000000);
-    const prefix = cleanWord(req.query.prefix || "word999");
-    res.json(await command("benchmark", size, prefix));
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
+  const size = Math.min(Math.max(Number(req.query.size) || 10000, 100), 1_000_000);
+  const prefix = searchIndex.tokenize(req.query.prefix ?? "").join("") || "word999";
+  res.json(await send("bench", size, prefix));
 });
 
-async function hydrateTrie() {
-  const collection = contactsCollection();
-  if (!collection) return 0;
-  const names = new Set();
-  const phones = new Set();
-  const cursor = collection.find({}, { projection: { name: 1, phone: 1, _id: 0 } });
+app.use((error, _req, res, _next) => {
+  const status = error.status ?? 500;
+  if (status >= 500) console.error(error);
+  res.status(status).json({ error: status >= 500 ? "something went wrong on the server" : error.message });
+});
 
-  for await (const document of cursor) {
-    const name = normalizeWord(document.name);
-    if (name) names.add(name);
-    const phone = String(document.phone || "").trim();
-    if (/^\d{10}$/.test(phone)) phones.add(phone);
-  }
-
-  for (const name of names) await command("insert", `${NAME_KEY}${name}`);
-  for (const phone of phones) await command("insert", `${PHONE_KEY}${phone}`);
-  return names.size + phones.size;
+async function rebuildIndex() {
+  const contacts = await store.all();
+  await Promise.all(contacts.map(searchIndex.add));
+  return contacts.length;
 }
 
-connectDb()
-  .then(async () => {
-    const loaded = await hydrateTrie();
-    if (loaded) console.log(`Loaded ${loaded} contact indexes from MongoDB into the Trie`);
-    app.listen(port, "0.0.0.0", () => console.log(`TrieConnect API running on http://0.0.0.0:${port}`));
-  })
-  .catch(error => {
-    console.error("MongoDB connection failed:", error.message);
-    process.exit(1);
-  });
+// Load a small sample set into an empty store so there is something to
+// search. On by default for memory storage, opt-in for MongoDB.
+const seed = process.env.SEED_SAMPLE || (store.kind === "memory" ? "true" : "false");
+if (seed === "true" && (await store.count()) === 0) {
+  const sample = JSON.parse(await readFile(new URL("../data/sample-contacts.json", import.meta.url), "utf8"));
+  for (const fields of sample) await store.create(fields);
+}
+
+const indexed = await rebuildIndex();
+whenRestarted(() => rebuildIndex().then(n => console.log(`trie engine restarted, re-indexed ${n} contacts`)));
+
+app.listen(port, "0.0.0.0", () => {
+  console.log(`API on :${port} - ${indexed} contacts indexed, storage: ${store.kind}`);
+});

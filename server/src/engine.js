@@ -1,65 +1,69 @@
+// Bridge to the C++ trie_engine process.
+//
+// Commands are written to stdin as they arrive; the engine answers each one
+// with a single JSON line, in order, so a FIFO of pending promises is enough
+// to match replies to requests. No locking, and bulk loads get pipelined.
+
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const serverRoot = process.cwd();
-const repoRoot = path.resolve(serverRoot, "..");
-const candidates = [
+const build = new URL("../../cpp/build/", import.meta.url);
+const enginePath = [
   process.env.TRIE_ENGINE_PATH,
-  path.join(repoRoot, "cpp", "build", "trie_engine"),
-  path.join(repoRoot, "cpp", "build", "Release", "trie_engine.exe"),
-  path.join(repoRoot, "cpp", "build", "trie_engine.exe"),
-  path.join(serverRoot, "cpp", "build", "trie_engine")
-].filter(Boolean);
+  fileURLToPath(new URL("trie_engine", build)),
+  fileURLToPath(new URL("Release/trie_engine.exe", build)),
+  fileURLToPath(new URL("trie_engine.exe", build)),
+].find(p => p && existsSync(p));
 
-const enginePath = candidates.find(existsSync);
-let engine;
+let child = null;
 let buffer = "";
-const queue = [];
-let busy = false;
+const pending = [];
+let onRestart = null;
 
-function startEngine() {
-  if (!enginePath) throw new Error("C++ Trie engine not found. Run npm run build:cpp first.");
-  engine = spawn(enginePath, [], { stdio: ["pipe", "pipe", "pipe"] });
-  engine.stdout.setEncoding("utf8");
-  engine.stdout.on("data", chunk => {
+function start() {
+  if (!enginePath) throw new Error("trie_engine binary not found - run `npm run build:cpp`");
+
+  child = spawn(enginePath, [], { stdio: ["pipe", "pipe", "inherit"] });
+  child.stdin.on("error", () => {}); // surfaced through the exit handler
+  child.stdout.setEncoding("utf8");
+  child.stdout.on("data", chunk => {
     buffer += chunk;
-    let newline = buffer.indexOf("\n");
-    while (newline !== -1) {
+    let newline;
+    while ((newline = buffer.indexOf("\n")) !== -1) {
       const line = buffer.slice(0, newline);
       buffer = buffer.slice(newline + 1);
-      newline = buffer.indexOf("\n");
-      const current = queue.shift();
-      busy = false;
-      if (current) {
-        try { current.resolve(JSON.parse(line)); }
-        catch (error) { current.reject(error); }
+      const request = pending.shift();
+      if (!request) continue;
+      try {
+        const reply = JSON.parse(line);
+        if (reply.error) request.reject(new Error(reply.error));
+        else request.resolve(reply);
+      } catch (error) {
+        request.reject(error);
       }
-      processNext();
     }
   });
-  engine.stderr.on("data", chunk => console.error("[trie-engine]", chunk.toString().trim()));
-  engine.on("exit", error => {
-    const pending = queue.splice(0);
-    for (const request of pending) request.reject(error || new Error("Trie engine stopped"));
-    engine = null;
+
+  child.on("exit", code => {
+    console.error(`trie_engine exited (code ${code})`);
+    child = null;
     buffer = "";
-    busy = false;
+    for (const request of pending.splice(0)) request.reject(new Error("trie engine stopped"));
+    // The index lived in that process, so whoever owns the data rebuilds it.
+    if (onRestart) setImmediate(onRestart);
   });
 }
 
-function processNext() {
-  if (busy || queue.length === 0) return;
-  if (!engine) startEngine();
-  const request = queue[0];
-  busy = true;
-  engine.stdin.write(request.command + "\n");
+export function whenRestarted(callback) {
+  onRestart = callback;
 }
 
-export function command(name, ...args) {
-  const safeCommand = [name, ...args].map(value => String(value).replace(/[\r\n]/g, " ")).join(" ");
+export function send(...parts) {
+  if (!child) start();
+  const line = parts.map(part => String(part).replace(/\s+/g, "")).join(" ");
   return new Promise((resolve, reject) => {
-    queue.push({ command: safeCommand, resolve, reject });
-    processNext();
+    pending.push({ resolve, reject });
+    child.stdin.write(line + "\n");
   });
 }

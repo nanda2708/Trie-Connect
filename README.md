@@ -20,7 +20,7 @@ Type `sa` and you get everyone with a name word starting with "sa". Type `98765`
 - **`server/`**: Express. It turns contacts into trie keys, forwards commands to the engine, and turns the ids it gets back into full records.
 - **`frontend/`**: React + TypeScript. Search, the trie path view, contact editing, and the benchmark.
 
-MongoDB only stores records. It never runs a search query. If `MONGODB_URI` isn't set, the API keeps records in memory and loads some sample contacts, so the whole thing runs with no database at all.
+MongoDB only stores records. It never runs a search query. If `MONGODB_URI` isn't set, the API keeps records in memory and loads some sample contacts, so the whole thing runs with no database at all. If MongoDB is set but unreachable, the API logs it, falls back to memory, and `/api/health` includes a `warning`.
 
 ## The trie
 

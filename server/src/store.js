@@ -49,7 +49,8 @@ function memoryStore() {
 }
 
 async function mongoStore(uri, dbName) {
-  const client = new MongoClient(uri);
+  // Fail in seconds rather than the driver's default 30s if Atlas is unreachable.
+  const client = new MongoClient(uri, { serverSelectionTimeoutMS: 8000 });
   await client.connect();
   const collection = client.db(dbName).collection("contacts");
   await collection.createIndex({ phone: 1 }, { unique: true });
@@ -110,8 +111,15 @@ async function mongoStore(uri, dbName) {
   };
 }
 
+// A bad MONGODB_URI shouldn't take the whole API down: search still works
+// on memory storage, and /api/health says why it isn't using MongoDB.
 export async function openStore() {
   const uri = process.env.MONGODB_URI;
   if (!uri) return memoryStore();
-  return mongoStore(uri, process.env.MONGODB_DB || "trie_connect");
+  try {
+    return await mongoStore(uri, process.env.MONGODB_DB || "trie_connect");
+  } catch (error) {
+    console.error(`MongoDB unavailable (${error.message}); falling back to memory storage`);
+    return { ...memoryStore(), warning: `MongoDB unavailable: ${error.code || error.message}` };
+  }
 }

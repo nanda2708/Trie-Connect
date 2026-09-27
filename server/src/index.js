@@ -43,7 +43,7 @@ app.use(cors({ origin: process.env.CLIENT_URL || "http://localhost:5173" }));
 app.use(express.json({ limit: "100kb" }));
 
 app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, storage: store.kind });
+  res.json({ ok: true, storage: store.kind, ...(store.warning && { warning: store.warning }) });
 });
 
 app.get("/api/stats", async (_req, res) => {

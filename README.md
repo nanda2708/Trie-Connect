@@ -1,212 +1,134 @@
 # TrieConnect
 
-TrieConnect is an interactive prefix-search engine built to demonstrate data structures, algorithms, and systems design rather than CRUD-heavy application development.
+A contact search app where the search index is a trie I wrote in C++.
 
-The central data structure is a **Trie implemented in C++17**. React provides the interface and visualization, Node.js/Express provides the API boundary, and MongoDB is used only for persistence.
+Type `sa` and you get everyone with a name word starting with "sa". Type `98765` and you get every number starting with those digits. On the right, the UI shows the path the query took through the trie: which node it's on at each step, how many entries sit below that node, and where it stops if nothing matches.
 
-## 🌐 Live Deployment
+**Live:** [frontend](https://trie-connect-frontend.vercel.app/) · [API](https://trie-connect-api.onrender.com/api/health). It's on Render's free tier, so the first request can take ~30s while the server wakes up.
 
-| Component | Deployment |
+## How it fits together
+
+```text
+ React UI ──HTTP──▶ Express API ──stdin/stdout──▶ trie_engine (C++)
+                         │                          the search index
+                         ▼
+                 MongoDB (or memory)
+                 full contact records
+```
+
+- **`cpp/`**: the trie and a small engine process around it. This is the core of the project.
+- **`server/`**: Express. It turns contacts into trie keys, forwards commands to the engine, and turns the ids it gets back into full records.
+- **`frontend/`**: React + TypeScript. Search, the trie path view, contact editing, and the benchmark.
+
+MongoDB only stores records. It never runs a search query. If `MONGODB_URI` isn't set, the API keeps records in memory and loads some sample contacts, so the whole thing runs with no database at all.
+
+## The trie
+
+`cpp/Trie.h` maps string keys to one or more string values:
+
+```cpp
+bool insert(const std::string& key, const std::string& value);
+bool erase(const std::string& key, const std::string& value);
+std::vector<std::string> valuesWithPrefix(const std::string& prefix, std::size_t limit) const;
+std::vector<std::string> keysWithPrefix(const std::string& prefix, std::size_t limit) const;
+int countPrefix(const std::string& prefix) const;
+std::vector<Step> walk(const std::string& prefix) const;
+```
+
+Some decisions worth mentioning:
+
+- **Keys hold several values.** Two people can both be called Rahul, so the node for `n:rahul` keeps a list of contact ids. An earlier version only stored an end-of-word flag. The API then had to query MongoDB by name to find out who matched, and check whether anyone else still used a name before removing it. With ids in the trie, both go away.
+- **Children are a sorted `vector<pair<char, unique_ptr<Node>>>`,** not a hash map. Most nodes have one to three children, so a binary search over a tiny vector is cheap. Results also come out in alphabetical order, where the old `unordered_map` version sorted child keys at every node on every query. `unique_ptr` means no hand-written destructor. Memory is about the same as before (roughly 150–170 MB for 1M words, measured both ways).
+- **Every node stores a subtree count.** `countPrefix` is O(L) instead of walking the whole subtree, and the UI gets its "N entries below" numbers for free.
+- **Erase prunes.** Removing a key walks back up and deletes nodes that no longer lead anywhere, so the tree doesn't fill up with dead branches after edits. The tests check that the node count returns to 1 once everything is deleted.
+- **`valuesWithPrefix` is an iterative DFS with a seen-set.** One contact is indexed under several words (`sai` and `saikiran`), so a prefix like `sa` can reach the same id twice.
+
+| Operation | Cost |
 |---|---|
-| Frontend | [TrieConnect — Prefix Search Engine](https://trie-connect-frontend.vercel.app/) |
-| Backend API | [TrieConnect API](https://trie-connect-api.onrender.com) |
+| insert / erase / contains | O(L) |
+| countPrefix | O(L) |
+| keysWithPrefix / valuesWithPrefix | O(L + size of the matched subtree, stopped at `limit`) |
 
-**Frontend:** React + TypeScript + Vite + Tailwind CSS  
-**Backend:** Node.js + Express + C++17 Trie  
-**Database:** MongoDB Atlas
+L is the length of the key or prefix. None of these depend on how many contacts exist.
 
-## Stack
-
-- **React + TypeScript + Tailwind CSS** — interface, traversal visualization, and benchmark UI
-- **Node.js + Express** — REST API and C++ process bridge
-- **C++17** — Trie implementation and benchmark engine
-- **MongoDB** — persistence for stored words
-- **CMake + CTest** — native build and tests
-- **GitHub Actions** — automated C++ and frontend checks
-
-## Architecture
+### How contacts become keys
 
 ```text
-React + TypeScript + Tailwind
-             │
-             │ REST
-             ▼
-       Node.js + Express
-             │
-             ├──────────────► MongoDB
-             │                 persistence
-             │
-             ▼
-       persistent C++ process
-             │
-             ▼
-          Trie index
+"Priya Sharma", 9876543210, id c7   →   n:priya       → c7
+                                        n:sharma      → c7
+                                        p:9876543210  → c7
 ```
 
-MongoDB never performs the prefix search. Words are persisted there and loaded into the in-memory C++ Trie when the server starts.
+The `n:` / `p:` prefixes keep names and phone numbers apart in one tree. A query that starts with a digit searches `p:`, anything else searches `n:`.
 
-## What the Trie demonstrates
+A multi-word query like `rahul k` does one trie lookup per word and intersects the id lists. There's one more check after that, because both words could match the same name word (`rahul r` would otherwise match "Rahul Kumar" through "rahul"). That lives in `server/src/searchIndex.js`.
 
-The C++ engine implements:
+### The engine process
 
-- insertion
-- exact search
-- prefix existence checks
-- autocomplete
-- prefix counting
-- deletion with unused-node cleanup
-- node statistics
-- live Trie vs linear-search benchmarking
-
-For a prefix `nan`, the engine first walks `n → a → n`, then traverses only the subtree below that node to collect matches.
-
-## Live benchmark
-
-The benchmark command generates the same dataset for both algorithms and measures the lookup phase. The default UI prefix is deliberately selective (`word999`) so the Trie is not forced to enumerate the entire dataset just to demonstrate prefix navigation.
+`trie_engine` reads one command per line and writes one JSON line back, in order:
 
 ```text
-GET /api/benchmark?size=100000&prefix=word999
+add n:priya c7            → {"changed":true}
+find n:pr 50              → {"ids":["c7"],"entries":1,"micros":3.1}
+walk n:prx                → {"matched":2,"steps":[...]}
+bench 1000000 word999     → {"linearMs":4.9,"trieMs":0.03,...}
 ```
 
-The response contains actual timings from the C++ process:
+Node keeps one engine running and writes commands as they come in. Because replies come back in the same order, a plain FIFO of pending promises matches them up, and bulk loads get pipelined instead of waiting on each round trip. If the engine crashes, the API starts a new one and re-indexes from the store.
 
-```json
-{
-  "size": 100000,
-  "prefix": "word999",
-  "linearMs": 1.23,
-  "trieMs": 0.01,
-  "linearMatches": 1,
-  "trieMatches": 1
-}
-```
+A native addon (N-API) would avoid the pipe, but a child process is easier to build on Render and keeps a crash in C++ from taking the API down with it.
 
-The numbers above are illustrative response shape only. The application measures the real values at request time. The UI runs benchmarks at 1K, 10K, 100K and 1M records and displays those returned measurements.
+## Benchmark
 
-## Project structure
+The engine generates `word0 … wordN`, builds a trie from it, then finds every word starting with `word999` two ways: walking the trie, and checking every string in a `vector`. Each number is the median of 7 runs. You can run the same thing from the UI.
 
-```text
-cpp/
-  Trie.h
-  Trie.cpp
-  main.cpp
-  CMakeLists.txt
-  test.cpp
+Measured on a 4-core 2.1 GHz Xeon container:
 
-server/
-  src/
-    index.js
-    trieEngine.js
-    db.js
+| Words | Matches | Linear scan | Trie | Trie build |
+|---:|---:|---:|---:|---:|
+| 10,000 | 11 | 0.04 ms | 0.4 µs | 2.5 ms |
+| 100,000 | 111 | 0.40 ms | 2.1 µs | 25 ms |
+| 1,000,000 | 1,111 | ~5 ms | 0.03–0.14 ms | 0.3–0.6 s |
 
-frontend/
-  src/
-    App.tsx
-    api.ts
-    components/
-      TrieVisualizer.tsx
-      BenchmarkPanel.tsx
-    index.css
-    main.tsx
+The scan grows with the dataset. The trie grows with the number of matches it has to return, and there are 10× more matches at each row here. With a prefix that matches only a handful of words the difference is starker: `word12345` at 1M words takes 0.4 µs in the trie and 5.9 ms scanning. Building the trie is the expensive part, and it only pays off because the index is built once and searched many times.
 
-.github/
-  workflows/
-    ci.yml
-```
+## Running it
 
-## Local setup
-
-### Requirements
-
-- Node.js 20+
-- npm 10+
-- CMake 3.16+
-- a C++17 compiler
-- MongoDB Atlas or local MongoDB (optional for development)
-
-### Install dependencies
+Needs Node 20+, CMake 3.16+ and a C++17 compiler.
 
 ```bash
-npm install --workspaces
+npm install
+npm run build:cpp     # builds cpp/build/trie_engine
+npm run dev           # API on :5000, UI on :5173
 ```
 
-### Build and test the C++ engine
+That runs with in-memory storage and sample contacts. To use MongoDB, copy `server/.env.example` to `server/.env` and set `MONGODB_URI`.
+
+Tests:
 
 ```bash
-npm run build:cpp
-npm run test:cpp
+npm test              # C++ unit tests, then API tests against the real engine
 ```
-
-### Configure MongoDB
-
-Create `server/.env` locally:
-
-```env
-PORT=5000
-CLIENT_URL=http://localhost:5173
-MONGODB_URI=mongodb+srv://<username>:<password>@<cluster>/<database>
-MONGODB_DB=trie_connect
-```
-
-**Never commit `server/.env` or a real MongoDB credential.**
-
-If `MONGODB_URI` is not configured, the API still starts and the C++ Trie works in memory; persistence is simply disabled.
-
-### Run in development
-
-```bash
-npm run dev
-```
-
-Frontend: `http://localhost:5173`
-
-API: `http://localhost:5000`
-
-### Production build
-
-Build both native and frontend assets with:
-
-```bash
-npm run build
-```
-
-The API can then be started with:
-
-```bash
-npm start
-```
-
-The frontend is a separate Vite build in `frontend/dist`, so deployment should host that static frontend separately from the Express API (or add a static-file serving layer if deploying both together).
 
 ## API
 
 ```text
-GET    /api/health
-GET    /api/trie/search?word=react
-GET    /api/trie/prefix?prefix=rea&limit=8
-GET    /api/trie/stats
+GET    /api/contacts?q=ra        search (empty q lists everyone)
+POST   /api/contacts             { name, phone, email?, notes? }
+PUT    /api/contacts/:id
+DELETE /api/contacts/:id
+GET    /api/trie/walk?q=ra       path through the trie, for the visualiser
+GET    /api/stats                node / key / entry counts
 GET    /api/benchmark?size=100000&prefix=word999
-POST   /api/trie/insert       { "word": "react" }
-POST   /api/trie/load         { "words": ["react", "redis"] }
-DELETE /api/trie/:word
+GET    /api/health
 ```
 
-## Complexity
+## Deployment
 
-For a word/prefix of length `L` and `K` matching words returned:
+The API ships as a Docker image (see `Dockerfile` and `render.yaml`). The first stage compiles the engine and runs the C++ tests, so a broken trie fails the build. The second stage is just Node and the binary. The frontend is a static Vite build on Vercel with `VITE_API_URL` pointing at the API.
 
-| Operation | Complexity |
-|---|---:|
-| Insert | O(L) |
-| Exact search | O(L) |
-| Prefix existence | O(L) |
-| Prefix lookup | O(L + K) |
-| Delete | O(L) |
+## Limitations
 
-A linear prefix search scans all `N` stored words, so its lookup cost is approximately **O(N × L)** in the worst case. The Trie avoids that full scan by using the characters of the prefix to navigate directly to the relevant subtree.
-
-## Persistence model
-
-MongoDB stores normalized words in the `words` collection. Inserts, deletes, and bulk loads update MongoDB when it is configured. On server startup, persisted words are read back into the C++ Trie so the algorithmic index is rebuilt from durable data.
-
-This separation is intentional: **MongoDB is storage; C++ Trie is the algorithm.**
+- Name search is prefix-only and ASCII after stripping accents. "José" is indexed as `jose`, but non-Latin scripts are dropped.
+- One engine process handles every command in order, so a 1M benchmark run briefly delays searches. Fine for a demo, not for real traffic.
+- The index lives in memory and is rebuilt from the store on start, which takes a moment with a large contact list.

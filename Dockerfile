@@ -1,30 +1,24 @@
-FROM node:22-bookworm
-
-WORKDIR /app
-
-# Install the native toolchain required to build the C++ Trie engine.
+# Build and test the C++ engine
+FROM debian:bookworm-slim AS engine
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends cmake g++ \
+    && apt-get install -y --no-install-recommends cmake make g++ \
     && rm -rf /var/lib/apt/lists/*
-
-# Copy package manifests first so dependency installation can be cached.
-COPY package.json package-lock.json ./
-COPY frontend/package.json ./frontend/package.json
-COPY server/package.json ./server/package.json
-
-RUN npm ci
-
-# Copy the application source.
+WORKDIR /src
 COPY cpp ./cpp
+RUN cmake -S cpp -B cpp/build -DCMAKE_BUILD_TYPE=Release \
+    && cmake --build cpp/build \
+    && ctest --test-dir cpp/build --output-on-failure
+
+# API image: Node plus the compiled engine, nothing else
+FROM node:22-bookworm-slim
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY server/package.json ./server/
+COPY frontend/package.json ./frontend/
+RUN npm ci --workspace server --omit=dev
 COPY server ./server
-COPY frontend ./frontend
+COPY --from=engine /src/cpp/build/trie_engine ./cpp/build/trie_engine
 
-# Build the C++ Trie engine used by the Express API.
-RUN npm run build:cpp
-
-ENV NODE_ENV=production
-ENV PORT=10000
-
+ENV NODE_ENV=production PORT=10000
 EXPOSE 10000
-
-CMD ["npm", "run", "start", "--workspace", "server"]
+CMD ["node", "server/src/index.js"]

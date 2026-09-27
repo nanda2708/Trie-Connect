@@ -13,3 +13,6 @@ services:
         value: trie_connect
       - key: CLIENT_URL
         sync: false
+      # Loads sample contacts only if the collection is empty
+      - key: SEED_SAMPLE
+        value: "true"

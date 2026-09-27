@@ -1,12 +1,8 @@
-node_modules
-npm-debug.log*
+**/node_modules
+**/dist
+cpp/build
 .git
 .github
-frontend/dist
-frontend/node_modules
-server/node_modules
-cpp/build
 .env
-.env.*
+**/.env
 *.log
-README* 
